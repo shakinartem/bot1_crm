@@ -30,4 +30,9 @@ async def import_csv_file(message: Message) -> None:
 
     async with async_session_factory() as session:
         report = await import_companies_from_csv(session, text)
-    await message.answer(f"Импорт завершен.\nДобавлено: {report['added']}\nПропущено: {report['skipped']}\nОшибки: {len(report['errors'])}")
+    await message.answer(
+        f"Импорт завершен.\n"
+        f"Добавлено: {report['added']}\n"
+        f"Пропущено как дубликаты: {report['skipped']}\n"
+        f"Ошибки: {len(report['errors'])}"
+    )

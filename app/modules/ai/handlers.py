@@ -21,12 +21,12 @@ async def prepare_call(message: Message) -> None:
     await message.answer(result or "Компания не найдена.")
 
 
-@router.message(F.text == "Подготовить звонок")
+@router.message(F.text == "AI-подготовка к звонку")
 async def prepare_call_help(message: Message) -> None:
     await message.answer("Введите /prepare_call и ID компании, например: /prepare_call 12")
 
 
-@router.message(F.text == "Настройки AI")
+@router.message(Command("ai_settings"))
 async def ai_settings(message: Message) -> None:
     settings = get_settings()
     await message.answer(

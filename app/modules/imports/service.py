@@ -2,7 +2,7 @@ import csv
 from dataclasses import dataclass, field
 from io import StringIO
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.crm.models import Company
@@ -16,9 +16,11 @@ CSV_COLUMNS = {
     "inn",
     "ogrn",
     "city",
+    "region",
     "address",
     "phone",
     "website",
+    "social_links",
     "maps_url",
     "vk_url",
     "instagram_url",
@@ -40,7 +42,14 @@ class ImportReport:
         return {"added": self.added, "skipped": self.skipped, "errors": self.errors}
 
 
-async def _is_duplicate(session: AsyncSession, phone: str | None, website: str | None, inn: str | None) -> bool:
+async def _is_duplicate(
+    session: AsyncSession,
+    *,
+    name: str | None,
+    phone: str | None,
+    website: str | None,
+    inn: str | None,
+) -> bool:
     filters = []
     if phone:
         filters.append(Company.phone == phone)
@@ -48,6 +57,8 @@ async def _is_duplicate(session: AsyncSession, phone: str | None, website: str |
         filters.append(Company.website == website)
     if inn:
         filters.append(Company.inn == inn)
+    if name:
+        filters.append(func.lower(Company.name) == name.lower())
     if not filters:
         return False
     result = await session.execute(select(Company.id).where(or_(*filters)).limit(1))
@@ -67,7 +78,7 @@ async def import_companies_from_csv(session: AsyncSession, csv_text: str) -> dic
             if not data["name"]:
                 report.errors.append(f"Строка {row_number}: не заполнено name.")
                 continue
-            if await _is_duplicate(session, data["phone"], data["website"], data["inn"]):
+            if await _is_duplicate(session, name=data["name"], phone=data["phone"], website=data["website"], inn=data["inn"]):
                 report.skipped += 1
                 continue
             if data["rating"] is not None:

@@ -2,25 +2,42 @@ from app.modules.crm.models import Company
 
 
 def build_cold_call_prompt(company: Company) -> str:
+    decision_makers = "\n".join(
+        f"- {dm.full_name}, {dm.role or 'роль не указана'}, телефон: {dm.phone or 'нет'}, Telegram: {dm.telegram or 'нет'}"
+        for dm in company.decision_makers
+    ) or "ЛПР пока не указаны."
+    interactions = "\n".join(
+        f"- {item.created_at:%Y-%m-%d}: {item.type}, результат: {item.result or 'нет'}, кратко: {item.summary or 'нет'}"
+        for item in company.interactions[:10]
+    ) or "Истории касаний пока нет."
+
     return f"""
 Ты sales intelligence ассистент агентства ШАРиК digital.
-Подготовь менеджера к холодному звонку в стоматологию.
+Подготовь менеджера к холодному звонку в стоматологическую клинику.
 
-Данные компании:
+Данные клиники:
 - Название: {company.name}
-- Юр. название: {company.legal_name or "не указано"}
+- Юридическое название: {company.legal_name or "не указано"}
+- ИНН: {company.inn or "не указан"}
 - Город: {company.city or "не указан"}
+- Регион: {company.region or "не указан"}
 - Адрес: {company.address or "не указан"}
 - Телефон: {company.phone or "не указан"}
 - Сайт: {company.website or "не указан"}
+- Социальные ссылки: {company.social_links or company.other_socials or "не указаны"}
 - Карты: {company.maps_url or "не указаны"}
-- VK: {company.vk_url or "не указан"}
-- Instagram: {company.instagram_url or "не указан"}
-- Telegram: {company.telegram_url or "не указан"}
 - Рейтинг: {company.rating or "не указан"}
 - Отзывы: {company.reviews_count or "не указаны"}
 - Источник: {company.source or "не указан"}
+- Статус: {company.status}
+- Приоритет: {company.priority}
 - Заметки: {company.notes or "нет"}
+
+ЛПР:
+{decision_makers}
+
+История касаний:
+{interactions}
 
 Формула продаж:
 1. ФВ — финансовая возможность.
@@ -33,17 +50,16 @@ def build_cold_call_prompt(company: Company) -> str:
 С — ситуация, О — опыт, П — принципы, Р — решения, А — аналоги, Н — нежелательное, О — ограничения.
 
 Сгенерируй строго по разделам:
-1. Кратко о компании.
+1. Краткое резюме клиники.
 2. Возможные боли.
-3. Возможные точки роста.
-4. Персональный заход.
-5. Вопросы по ФВ.
-6. Вопросы по СОПРАНО.
-7. Фразы для доверия.
-8. Вопросы по ЛПР.
-9. Причины действовать сейчас.
-10. Возможные возражения.
-11. Ответы на возражения.
-12. Следующий шаг.
-Пиши по-русски, практично, без воды.
+3. Что проверить перед звонком.
+4. Скрипт первого звонка.
+5. 5 персонализированных заходов.
+6. Возможные возражения.
+7. Ответы на возражения.
+8. Что предложить как первый шаг.
+9. Короткий текст сообщения после звонка.
+10. Следующее действие.
+
+Пиши по-русски, практично, без воды. Не выдумывай факты, если данных нет: помечай их как гипотезы.
 """.strip()

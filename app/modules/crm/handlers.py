@@ -11,11 +11,10 @@ router = Router(name="crm")
 
 def main_menu() -> ReplyKeyboardMarkup:
     rows = [
-        [KeyboardButton(text="Добавить компанию"), KeyboardButton(text="Список лидов")],
-        [KeyboardButton(text="Импорт CSV"), KeyboardButton(text="Поиск компании")],
-        [KeyboardButton(text="Карточка компании"), KeyboardButton(text="Подготовить звонок")],
-        [KeyboardButton(text="Загрузить звонок"), KeyboardButton(text="Указать результат звонка")],
-        [KeyboardButton(text="Передать на консультацию"), KeyboardButton(text="Настройки AI")],
+        [KeyboardButton(text="Компании"), KeyboardButton(text="Добавить компанию")],
+        [KeyboardButton(text="Поиск"), KeyboardButton(text="Импорт CSV")],
+        [KeyboardButton(text="Задачи на сегодня"), KeyboardButton(text="AI-подготовка к звонку")],
+        [KeyboardButton(text="Статистика"), KeyboardButton(text="Настройки")],
     ]
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
 
@@ -51,7 +50,7 @@ async def new_company(message: Message) -> None:
 
 
 @router.message(Command("leads"))
-@router.message(F.text == "Список лидов")
+@router.message(F.text == "Компании")
 async def leads(message: Message) -> None:
     async with async_session_factory() as session:
         companies = await list_companies(session, limit=15)
@@ -65,16 +64,16 @@ async def leads(message: Message) -> None:
 async def search(message: Message) -> None:
     query = (message.text or "").replace("/search", "", 1).strip()
     if not query:
-        await message.answer("Формат: /search название, телефон, ИНН или сайт")
+        await message.answer("Формат: /search название, телефон, ИНН, город, сайт или ФИО ЛПР")
         return
     async with async_session_factory() as session:
         companies = await search_companies(session, query)
     await message.answer("\n".join(f"#{c.id} {c.name} | {c.phone or '-'} | {c.website or '-'}" for c in companies) or "Ничего не найдено.")
 
 
-@router.message(F.text == "Поиск компании")
+@router.message(F.text == "Поиск")
 async def search_help(message: Message) -> None:
-    await message.answer("Введите /search и название, телефон, ИНН или сайт.")
+    await message.answer("Введите /search и название, телефон, ИНН, город, сайт или ФИО ЛПР.")
 
 
 @router.message(Command("company"))
@@ -86,11 +85,6 @@ async def company_card(message: Message) -> None:
     async with async_session_factory() as session:
         company = await get_company(session, int(raw_id))
     await message.answer(format_company_card(company), parse_mode="HTML") if company else await message.answer("Компания не найдена.")
-
-
-@router.message(F.text == "Карточка компании")
-async def company_card_help(message: Message) -> None:
-    await message.answer("Введите /company и ID компании, например: /company 12")
 
 
 @router.message(Command("call_result"))
@@ -105,11 +99,11 @@ async def call_result(message: Message) -> None:
     await message.answer(f"Результат сохранен. Статус: {company.status}") if company else await message.answer("Компания не найдена.")
 
 
-@router.message(F.text == "Указать результат звонка")
-async def call_result_help(message: Message) -> None:
-    await message.answer("Формат: /call_result ID; недозвон|отказ|интересно|перезвонить|назначена консультация")
+@router.message(F.text == "Статистика")
+async def stats_placeholder(message: Message) -> None:
+    await message.answer("Статистика будет добавлена на следующем этапе.")
 
 
-@router.message(F.text == "Передать на консультацию")
-async def consultation_help(message: Message) -> None:
-    await message.answer("Используйте: /call_result ID; назначена консультация")
+@router.message(F.text == "Настройки")
+async def settings_placeholder(message: Message) -> None:
+    await message.answer("Настройки CRM будут добавлены на следующем этапе. AI-настройки доступны отдельной командой.")

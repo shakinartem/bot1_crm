@@ -4,13 +4,21 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.modules.crm.constants import CompanyStatus, InteractionType
-from app.modules.crm.models import Company, DecisionMaker, LeadInteraction, Task
-from app.modules.crm.schemas import CompanyCreate, DecisionMakerCreate
+from app.modules.crm.constants import CompanyStatus, InteractionResult, InteractionType, TaskStatus
+from app.modules.crm.models import Company, ContactPoint, DecisionMaker, FollowUpTask, LeadInteraction
+from app.modules.crm.schemas import (
+    CompanyCreate,
+    CompanyUpdate,
+    ContactPointCreate,
+    DecisionMakerCreate,
+    FollowUpTaskCreate,
+    FollowUpTaskUpdate,
+    InteractionCreate,
+)
 
 
 async def create_company(session: AsyncSession, payload: CompanyCreate) -> Company:
-    company = Company(**payload.model_dump(mode="json"))
+    company = Company(**payload.model_dump())
     session.add(company)
     await session.commit()
     await session.refresh(company)
@@ -28,6 +36,7 @@ async def get_company(session: AsyncSession, company_id: int) -> Company | None:
         .where(Company.id == company_id)
         .options(
             selectinload(Company.decision_makers),
+            selectinload(Company.contacts),
             selectinload(Company.interactions),
             selectinload(Company.tasks),
             selectinload(Company.calls),
@@ -36,15 +45,47 @@ async def get_company(session: AsyncSession, company_id: int) -> Company | None:
     return result.scalar_one_or_none()
 
 
+async def update_company(session: AsyncSession, company_id: int, payload: CompanyUpdate) -> Company | None:
+    company = await get_company(session, company_id)
+    if not company:
+        return None
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(company, field, value)
+    session.add(company)
+    await session.commit()
+    await session.refresh(company)
+    return company
+
+
+async def delete_company(session: AsyncSession, company_id: int) -> bool:
+    company = await get_company(session, company_id)
+    if not company:
+        return False
+    await session.delete(company)
+    await session.commit()
+    return True
+
+
 async def search_companies(session: AsyncSession, query: str, limit: int = 10) -> list[Company]:
     pattern = f"%{query}%"
     result = await session.execute(
         select(Company)
-        .where(or_(Company.name.ilike(pattern), Company.phone.ilike(pattern), Company.inn.ilike(pattern), Company.website.ilike(pattern)))
+        .outerjoin(DecisionMaker)
+        .where(
+            or_(
+                Company.name.ilike(pattern),
+                Company.legal_name.ilike(pattern),
+                Company.phone.ilike(pattern),
+                Company.inn.ilike(pattern),
+                Company.website.ilike(pattern),
+                Company.city.ilike(pattern),
+                DecisionMaker.full_name.ilike(pattern),
+            )
+        )
         .order_by(Company.created_at.desc())
         .limit(limit)
     )
-    return list(result.scalars().all())
+    return list(result.scalars().unique().all())
 
 
 async def add_decision_maker(session: AsyncSession, payload: DecisionMakerCreate) -> DecisionMaker:
@@ -55,19 +96,72 @@ async def add_decision_maker(session: AsyncSession, payload: DecisionMakerCreate
     return dm
 
 
-async def add_interaction(
-    session: AsyncSession,
-    company_id: int,
-    interaction_type: str,
-    summary: str | None = None,
-    result: str | None = None,
-    next_step: str | None = None,
-) -> LeadInteraction:
-    interaction = LeadInteraction(company_id=company_id, type=interaction_type, summary=summary, result=result, next_step=next_step)
+async def list_decision_makers(session: AsyncSession, company_id: int) -> list[DecisionMaker]:
+    result = await session.execute(select(DecisionMaker).where(DecisionMaker.company_id == company_id).order_by(DecisionMaker.is_primary.desc()))
+    return list(result.scalars().all())
+
+
+async def add_contact_point(session: AsyncSession, payload: ContactPointCreate) -> ContactPoint:
+    contact = ContactPoint(**payload.model_dump())
+    session.add(contact)
+    await session.commit()
+    await session.refresh(contact)
+    return contact
+
+
+async def list_contact_points(session: AsyncSession, company_id: int) -> list[ContactPoint]:
+    result = await session.execute(select(ContactPoint).where(ContactPoint.company_id == company_id).order_by(ContactPoint.is_primary.desc()))
+    return list(result.scalars().all())
+
+
+async def add_interaction(session: AsyncSession, payload: InteractionCreate) -> LeadInteraction:
+    data = payload.model_dump()
+    interaction = LeadInteraction(**data, next_step=data.get("next_action"))
     session.add(interaction)
     await session.commit()
     await session.refresh(interaction)
     return interaction
+
+
+async def list_interactions(session: AsyncSession, company_id: int) -> list[LeadInteraction]:
+    result = await session.execute(
+        select(LeadInteraction).where(LeadInteraction.company_id == company_id).order_by(LeadInteraction.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+async def create_task(session: AsyncSession, payload: FollowUpTaskCreate) -> FollowUpTask:
+    data = payload.model_dump()
+    task = FollowUpTask(**data, due_date=data.get("due_at"))
+    session.add(task)
+    await session.commit()
+    await session.refresh(task)
+    return task
+
+
+async def list_tasks(session: AsyncSession, status: str | None = None) -> list[FollowUpTask]:
+    stmt = select(FollowUpTask).order_by(FollowUpTask.due_at.asc().nulls_last(), FollowUpTask.created_at.desc())
+    if status:
+        stmt = stmt.where(FollowUpTask.status == status)
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def update_task(session: AsyncSession, task_id: int, payload: FollowUpTaskUpdate) -> FollowUpTask | None:
+    result = await session.execute(select(FollowUpTask).where(FollowUpTask.id == task_id))
+    task = result.scalar_one_or_none()
+    if not task:
+        return None
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(task, field, value)
+        if field == "due_at":
+            task.due_date = value
+    if task.status == TaskStatus.DONE.value and task.completed_at is None:
+        task.completed_at = datetime.utcnow()
+    session.add(task)
+    await session.commit()
+    await session.refresh(task)
+    return task
 
 
 async def update_call_result(session: AsyncSession, company_id: int, result: str) -> Company | None:
@@ -75,32 +169,41 @@ async def update_call_result(session: AsyncSession, company_id: int, result: str
     if not company:
         return None
 
+    normalized = result.strip().lower()
     status_by_result = {
         "недозвон": CompanyStatus.NO_ANSWER.value,
-        "отказ": CompanyStatus.REFUSED.value,
+        "no_answer": CompanyStatus.NO_ANSWER.value,
+        "отказ": CompanyStatus.DEAL_LOST.value,
+        "rejected": CompanyStatus.DEAL_LOST.value,
         "интересно": CompanyStatus.INTERESTED.value,
+        "interested": CompanyStatus.INTERESTED.value,
         "перезвонить": CompanyStatus.CALL_PLANNED.value,
-        "назначена консультация": CompanyStatus.CONSULTATION_SCHEDULED.value,
+        "callback_requested": CompanyStatus.CALL_PLANNED.value,
+        "назначена консультация": CompanyStatus.CONSULTATION_PLANNED.value,
+        "consultation_booked": CompanyStatus.CONSULTATION_PLANNED.value,
     }
-    company.status = status_by_result.get(result, company.status)
+    company.status = status_by_result.get(normalized, company.status)
     session.add(company)
 
     interaction = LeadInteraction(
         company_id=company_id,
         type=InteractionType.CALL.value,
         summary=f"Результат звонка: {result}",
-        result=result,
-        next_step="Провести консультацию" if result == "назначена консультация" else None,
+        result=_interaction_result_for_call(normalized),
+        next_action="Провести консультацию" if company.status == CompanyStatus.CONSULTATION_PLANNED.value else None,
+        next_step="Провести консультацию" if company.status == CompanyStatus.CONSULTATION_PLANNED.value else None,
     )
     session.add(interaction)
 
-    if result == "назначена консультация":
+    if company.status == CompanyStatus.CONSULTATION_PLANNED.value:
+        due_at = datetime.utcnow() + timedelta(days=1)
         session.add(
-            Task(
+            FollowUpTask(
                 company_id=company_id,
                 title="Провести консультацию",
-                description="Клиент передан в сценарий консультации.",
-                due_date=datetime.utcnow() + timedelta(days=1),
+                description="Клиент готов к консультации. Передать в следующий сценарий.",
+                due_at=due_at,
+                due_date=due_at,
             )
         )
 
@@ -109,33 +212,42 @@ async def update_call_result(session: AsyncSession, company_id: int, result: str
     return company
 
 
+def _interaction_result_for_call(value: str) -> str:
+    mapping = {
+        "недозвон": InteractionResult.NO_ANSWER.value,
+        "no_answer": InteractionResult.NO_ANSWER.value,
+        "отказ": InteractionResult.REJECTED.value,
+        "rejected": InteractionResult.REJECTED.value,
+        "интересно": InteractionResult.INTERESTED.value,
+        "interested": InteractionResult.INTERESTED.value,
+        "перезвонить": InteractionResult.CALLBACK_REQUESTED.value,
+        "callback_requested": InteractionResult.CALLBACK_REQUESTED.value,
+        "назначена консультация": InteractionResult.CONSULTATION_BOOKED.value,
+        "consultation_booked": InteractionResult.CONSULTATION_BOOKED.value,
+    }
+    return mapping.get(value, InteractionResult.OTHER.value)
+
+
 def format_company_card(company: Company) -> str:
-    socials = "\n".join(
-        item
-        for item in [
-            f"VK: {company.vk_url}" if company.vk_url else "",
-            f"Instagram: {company.instagram_url}" if company.instagram_url else "",
-            f"Telegram: {company.telegram_url}" if company.telegram_url else "",
-            f"Другое: {company.other_socials}" if company.other_socials else "",
-        ]
-        if item
-    )
     dms = "\n".join(f"- {dm.full_name}, {dm.role or 'роль не указана'} {dm.phone or ''}" for dm in company.decision_makers) or "нет"
-    calls = "\n".join(f"- {call.created_at:%Y-%m-%d}: {call.manager_result or 'без результата'}" for call in company.calls) or "нет"
-    interactions = "\n".join(f"- {i.created_at:%Y-%m-%d}: {i.summary or i.type}" for i in company.interactions) or "нет"
-    tasks = "\n".join(f"- {task.title}: {task.status}" for task in company.tasks) or "нет"
+    contacts = "\n".join(f"- {contact.type}: {contact.value}" for contact in company.contacts) or "нет"
+    last_interaction = company.interactions[0].summary if company.interactions else "нет"
+    next_task = next((task for task in company.tasks if task.status == TaskStatus.OPEN.value), None)
+    next_action = next_task.title if next_task else "нет"
 
     return (
         f"<b>{company.name}</b>\n"
-        f"Статус: {company.status}\n"
+        f"Юридическое название: {company.legal_name or 'нет'}\n"
+        f"ИНН: {company.inn or 'нет'}\n"
+        f"Город: {company.city or 'нет'}\n"
+        f"Адрес: {company.address or 'нет'}\n"
         f"Телефон: {company.phone or 'нет'}\n"
         f"Сайт: {company.website or 'нет'}\n"
-        f"Адрес: {company.address or 'нет'}\n"
-        f"Рейтинг: {company.rating or 'нет'} | Отзывы: {company.reviews_count or 0}\n"
-        f"Соцсети:\n{socials or 'нет'}\n\n"
-        f"ЛПР:\n{dms}\n\n"
-        f"Заметки: {company.notes or 'нет'}\n\n"
-        f"Звонки:\n{calls}\n\n"
-        f"Взаимодействия:\n{interactions}\n\n"
-        f"Задачи:\n{tasks}"
+        f"Статус: {company.status}\n"
+        f"Приоритет: {company.priority}\n"
+        f"ЛПР:\n{dms}\n"
+        f"Контакты:\n{contacts}\n"
+        f"Последнее касание: {last_interaction}\n"
+        f"Следующее действие: {next_action}\n"
+        f"Заметки: {company.notes or 'нет'}"
     )

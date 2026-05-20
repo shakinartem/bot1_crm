@@ -22,7 +22,7 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 
 async def create_db_schema() -> None:
     from app.modules.calls.models import CallRecord  # noqa: F401
-    from app.modules.crm.models import Company, DecisionMaker, LeadInteraction, Task  # noqa: F401
+    from app.modules.crm.models import Company, ContactPoint, DecisionMaker, FollowUpTask, LeadInteraction  # noqa: F401
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

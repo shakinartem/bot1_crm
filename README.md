@@ -1,6 +1,6 @@
 # SHARiK Sales Intelligence Bot
 
-MVP Telegram-бота для холодных продаж стоматологиям: CRM, ЛПР, контакты, история взаимодействий, CSV-импорт, AI-подготовка к звонку и хранение записей.
+MVP Telegram-first CRM для холодных продаж стоматологическим клиникам. Бот помогает агентству «ШАРиК digital» хранить базу клиник, ЛПР, контакты, историю касаний, задачи менеджера, записи звонков и AI-подготовку к звонку.
 
 ## Установка
 
@@ -35,33 +35,66 @@ docker compose up --build
 
 ## Миграции
 
-Создать/обновить базу:
-
 ```bash
 alembic upgrade head
 ```
 
-Для MVP приложение также создает таблицы при старте, чтобы локальный запуск был быстрым.
+Для локального MVP приложение также создает таблицы при старте, но новые изменения схемы нужно проводить через Alembic.
+
+## CRM-ядро
+
+Основные сущности:
+
+- `Company` — клиника или компания.
+- `DecisionMaker` — ЛПР.
+- `ContactPoint` — отдельная контактная точка: телефон, email, сайт, Telegram, WhatsApp, VK, Instagram, другое.
+- `LeadInteraction` — касание: звонок, сообщение, email, встреча, консультация, КП, заметка.
+- `FollowUpTask` — задача менеджера.
+- `CallRecord` — запись звонка и будущая транскрибация.
+
+## API
+
+Health:
+
+- `GET /health`
+- `GET /api/health`
+
+CRM:
+
+- `GET /api/companies`
+- `POST /api/companies`
+- `GET /api/companies/{id}`
+- `PATCH /api/companies/{id}`
+- `DELETE /api/companies/{id}`
+- `GET /api/companies/{id}/interactions`
+- `POST /api/companies/{id}/interactions`
+- `GET /api/companies/{id}/decision-makers`
+- `POST /api/companies/{id}/decision-makers`
+- `GET /api/tasks`
+- `POST /api/tasks`
+- `PATCH /api/tasks/{id}`
+- `POST /api/imports/csv`
+- `POST /api/companies/{id}/ai/call-prep`
 
 ## AI Providers
 
 Переключаются через `AI_PROVIDER`:
 
-- `fallback` — локальный шаблонный ответ без внешних запросов.
+- `fallback` — локальный понятный ответ без внешних запросов.
 - `openrouter` — OpenRouter Chat Completions, нужен `OPENROUTER_API_KEY`.
 - `ollama` — локальная Ollama API, настройте `OLLAMA_BASE_URL` и `OLLAMA_MODEL`.
 
-AI-подготовка строится функцией `build_cold_call_prompt(company_data)` и покрывает ФВ, ОП, доверие, ЛПР, здесь-и-сейчас, а также СОПРАНО.
+Если ключей нет, бот и API не падают: используется fallback-подготовка.
 
 ## CSV импорт
 
-Колонки:
+Поддерживаемые колонки:
 
 ```text
-name,legal_name,inn,ogrn,city,address,phone,website,maps_url,vk_url,instagram_url,telegram_url,rating,reviews_count,source,notes
+name,legal_name,inn,ogrn,city,region,address,phone,website,social_links,maps_url,vk_url,instagram_url,telegram_url,rating,reviews_count,source,notes
 ```
 
-Дубли пропускаются по `phone`, `website`, `inn`. Отчет содержит:
+Дубли пропускаются по `inn`, `phone`, `website`, `name`. Отчет содержит:
 
 - `added`
 - `skipped`
@@ -69,7 +102,7 @@ name,legal_name,inn,ogrn,city,address,phone,website,maps_url,vk_url,instagram_ur
 
 В Telegram отправьте CSV документом с подписью `import_csv`. В API используйте `POST /api/imports/csv`.
 
-## Сценарий звонка
+## Базовый Telegram-сценарий
 
 1. Добавить компанию: `/new_company Название; телефон; сайт; город; заметки`
 2. Посмотреть список: `/leads`
@@ -78,21 +111,17 @@ name,legal_name,inn,ogrn,city,address,phone,website,maps_url,vk_url,instagram_ur
 5. Загрузить запись: отправить audio/voice/document с подписью `call:1`
 6. Сохранить результат: `/call_result 1; назначена консультация`
 
-Если результат — `назначена консультация`, система обновит статус, создаст interaction и задачу.
+## Документы проекта
 
-## Архитектура
-
-- `app/modules/crm` — компании, ЛПР, взаимодействия, задачи.
-- `app/modules/sales` — зарезервировано под расширение формулы продаж.
-- `app/modules/ai` — abstraction layer и провайдеры.
-- `app/modules/calls` — записи звонков и stub транскрибации.
-- `app/modules/imports` — CSV импорт.
-- `app/modules/files` — будущие политики хранения файлов.
+- `PROJECT_CONTEXT.md` — продуктовый и архитектурный контекст.
+- `TASKS.md` — текущий sprint/backlog.
+- `CHANGELOG.md` — журнал изменений.
 
 ## Следующие этапы
 
-- Парсинг карт и обогащение компаний.
-- Интеграция с ФНС для проверки юр. данных.
-- Реальная транскрибация через `faster-whisper` или `whisper.cpp`.
-- Интеграция телефонии.
-- Расширение qualification pipeline и передача в отдельный бот консультаций через очередь/API.
+- Telegram-меню CRM.
+- Карточка компании с inline-кнопками.
+- Добавление компании через FSM.
+- Поиск по компаниям и ЛПР.
+- История касаний и задачи менеджера в Telegram.
+- Интеграция с БОТ 2 Consultation AI.
