@@ -1,0 +1,7 @@
+*.py text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.example text eol=lf
+*.ini text eol=lf
+*.yml text eol=lf
+Dockerfile text eol=lf

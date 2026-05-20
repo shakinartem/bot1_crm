@@ -2,16 +2,12 @@
 
 ## Current Sprint
 
-- [x] Проверить и привести в порядок модели CRM.
-- [ ] Доработать карточку компании.
-- [x] Добавить статусы лида.
-- [x] Добавить историю взаимодействий.
-- [x] Добавить задачи менеджера.
-- [ ] Доработать Telegram-меню.
-- [x] Добавить поиск компаний.
-- [x] Улучшить импорт CSV.
-- [x] Добавить AI-подготовку к звонку.
-- [x] Добавить базовые API endpoints для CRM.
+- [x] Repair formatting and syntax after stage 1 push.
+- [x] Validate Python imports and compileall.
+- [x] Validate Alembic migration formatting.
+- [x] Add Telegram CRM menu.
+- [x] Add company card inline buttons.
+- [x] Add company creation FSM.
 
 ## Backlog
 
@@ -30,6 +26,8 @@
 - Этап 1: расширено CRM-ядро, добавлены `ContactPoint`, новые поля ЛПР, взаимодействий и задач.
 - Этап 1: добавлены `PROJECT_CONTEXT.md`, `TASKS.md`, `CHANGELOG.md`.
 - Этап 1: исправлена кодировка пользовательских сообщений в текущих Telegram handlers.
+- Stabilization: repaired source formatting, syntax risks, API payload handling, and Alembic batch settings.
+- Telegram CRM: added main menu flows, company card inline actions, tasks digest, and step-by-step company creation FSM.
 
 ## Bugs
 

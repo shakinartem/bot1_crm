@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Fixed source formatting/newline issues after CRM core expansion.
+- Fixed syntax risks in CRM services and migration files.
+- Fixed API handlers to avoid mutating Pydantic request payloads directly.
+- Validated app imports and migration readiness.
+- Added Telegram CRM menu flows for companies, search, and today's tasks.
+- Added inline buttons on company cards for refresh, AI call prep, task view, and quick call outcomes.
+- Added step-by-step Telegram FSM for company creation.
+- Escaped company card HTML output to avoid broken formatting from user-entered data.
 - Added `PROJECT_CONTEXT.md` with product and architecture context for BOT 1.
 - Added `TASKS.md` as the working backlog for the CRM MVP.
 - Added expanded CRM statuses, priorities, contact types, interaction results, and task statuses.

@@ -74,8 +74,9 @@ async def list_interactions(company_id: int, session: AsyncSession = Depends(get
 
 @api_router.post("/companies/{company_id}/interactions", response_model=InteractionRead, status_code=status.HTTP_201_CREATED)
 async def create_interaction(company_id: int, payload: InteractionCreate, session: AsyncSession = Depends(get_session)):
-    payload.company_id = company_id
-    return await crm_service.add_interaction(session, payload)
+    data = payload.model_dump()
+    data["company_id"] = company_id
+    return await crm_service.add_interaction(session, InteractionCreate(**data))
 
 
 @api_router.get("/companies/{company_id}/decision-makers", response_model=list[DecisionMakerRead])
@@ -85,8 +86,9 @@ async def list_decision_makers(company_id: int, session: AsyncSession = Depends(
 
 @api_router.post("/companies/{company_id}/decision-makers", response_model=DecisionMakerRead, status_code=status.HTTP_201_CREATED)
 async def create_decision_maker(company_id: int, payload: DecisionMakerCreate, session: AsyncSession = Depends(get_session)):
-    payload.company_id = company_id
-    return await crm_service.add_decision_maker(session, payload)
+    data = payload.model_dump()
+    data["company_id"] = company_id
+    return await crm_service.add_decision_maker(session, DecisionMakerCreate(**data))
 
 
 @api_router.get("/tasks", response_model=list[FollowUpTaskRead])

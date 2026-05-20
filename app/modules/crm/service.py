@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from html import escape
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -97,7 +98,9 @@ async def add_decision_maker(session: AsyncSession, payload: DecisionMakerCreate
 
 
 async def list_decision_makers(session: AsyncSession, company_id: int) -> list[DecisionMaker]:
-    result = await session.execute(select(DecisionMaker).where(DecisionMaker.company_id == company_id).order_by(DecisionMaker.is_primary.desc()))
+    result = await session.execute(
+        select(DecisionMaker).where(DecisionMaker.company_id == company_id).order_by(DecisionMaker.is_primary.desc())
+    )
     return list(result.scalars().all())
 
 
@@ -110,7 +113,9 @@ async def add_contact_point(session: AsyncSession, payload: ContactPointCreate) 
 
 
 async def list_contact_points(session: AsyncSession, company_id: int) -> list[ContactPoint]:
-    result = await session.execute(select(ContactPoint).where(ContactPoint.company_id == company_id).order_by(ContactPoint.is_primary.desc()))
+    result = await session.execute(
+        select(ContactPoint).where(ContactPoint.company_id == company_id).order_by(ContactPoint.is_primary.desc())
+    )
     return list(result.scalars().all())
 
 
@@ -140,7 +145,11 @@ async def create_task(session: AsyncSession, payload: FollowUpTaskCreate) -> Fol
 
 
 async def list_tasks(session: AsyncSession, status: str | None = None) -> list[FollowUpTask]:
-    stmt = select(FollowUpTask).order_by(FollowUpTask.due_at.asc().nulls_last(), FollowUpTask.created_at.desc())
+    stmt = (
+        select(FollowUpTask)
+        .options(selectinload(FollowUpTask.company))
+        .order_by(FollowUpTask.due_at.asc().nulls_last(), FollowUpTask.created_at.desc())
+    )
     if status:
         stmt = stmt.where(FollowUpTask.status == status)
     result = await session.execute(stmt)
@@ -185,17 +194,18 @@ async def update_call_result(session: AsyncSession, company_id: int, result: str
     company.status = status_by_result.get(normalized, company.status)
     session.add(company)
 
+    consultation_planned = company.status == CompanyStatus.CONSULTATION_PLANNED.value
     interaction = LeadInteraction(
         company_id=company_id,
         type=InteractionType.CALL.value,
         summary=f"Результат звонка: {result}",
         result=_interaction_result_for_call(normalized),
-        next_action="Провести консультацию" if company.status == CompanyStatus.CONSULTATION_PLANNED.value else None,
-        next_step="Провести консультацию" if company.status == CompanyStatus.CONSULTATION_PLANNED.value else None,
+        next_action="Провести консультацию" if consultation_planned else None,
+        next_step="Провести консультацию" if consultation_planned else None,
     )
     session.add(interaction)
 
-    if company.status == CompanyStatus.CONSULTATION_PLANNED.value:
+    if consultation_planned:
         due_at = datetime.utcnow() + timedelta(days=1)
         session.add(
             FollowUpTask(
@@ -229,25 +239,31 @@ def _interaction_result_for_call(value: str) -> str:
 
 
 def format_company_card(company: Company) -> str:
-    dms = "\n".join(f"- {dm.full_name}, {dm.role or 'роль не указана'} {dm.phone or ''}" for dm in company.decision_makers) or "нет"
-    contacts = "\n".join(f"- {contact.type}: {contact.value}" for contact in company.contacts) or "нет"
-    last_interaction = company.interactions[0].summary if company.interactions else "нет"
+    dms = (
+        "\n".join(
+            f"- {escape(dm.full_name)}, {escape(dm.role or 'роль не указана')} {escape(dm.phone or '')}".rstrip()
+            for dm in company.decision_makers
+        )
+        or "нет"
+    )
+    contacts = "\n".join(f"- {escape(contact.type)}: {escape(contact.value)}" for contact in company.contacts) or "нет"
+    last_interaction = escape(company.interactions[0].summary) if company.interactions and company.interactions[0].summary else "нет"
     next_task = next((task for task in company.tasks if task.status == TaskStatus.OPEN.value), None)
-    next_action = next_task.title if next_task else "нет"
+    next_action = escape(next_task.title) if next_task else "нет"
 
     return (
-        f"<b>{company.name}</b>\n"
-        f"Юридическое название: {company.legal_name or 'нет'}\n"
-        f"ИНН: {company.inn or 'нет'}\n"
-        f"Город: {company.city or 'нет'}\n"
-        f"Адрес: {company.address or 'нет'}\n"
-        f"Телефон: {company.phone or 'нет'}\n"
-        f"Сайт: {company.website or 'нет'}\n"
-        f"Статус: {company.status}\n"
-        f"Приоритет: {company.priority}\n"
+        f"<b>{escape(company.name)}</b>\n"
+        f"Юридическое название: {escape(company.legal_name or 'нет')}\n"
+        f"ИНН: {escape(company.inn or 'нет')}\n"
+        f"Город: {escape(company.city or 'нет')}\n"
+        f"Адрес: {escape(company.address or 'нет')}\n"
+        f"Телефон: {escape(company.phone or 'нет')}\n"
+        f"Сайт: {escape(company.website or 'нет')}\n"
+        f"Статус: {escape(company.status)}\n"
+        f"Приоритет: {escape(company.priority)}\n"
         f"ЛПР:\n{dms}\n"
         f"Контакты:\n{contacts}\n"
         f"Последнее касание: {last_interaction}\n"
         f"Следующее действие: {next_action}\n"
-        f"Заметки: {company.notes or 'нет'}"
+        f"Заметки: {escape(company.notes or 'нет')}"
     )
