@@ -1,0 +1,16 @@
+.env
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+app.db
+*.sqlite
+*.sqlite3
+storage/calls/*
+storage/imports/*
+storage/companies/*
+!storage/calls/.gitkeep
+!storage/imports/.gitkeep
+!storage/companies/.gitkeep
