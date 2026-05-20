@@ -35,17 +35,27 @@ async def api_health() -> dict[str, str]:
 
 
 @api_router.get("/companies", response_model=list[CompanyRead])
-async def list_companies(session: AsyncSession = Depends(get_session), limit: int = 20, offset: int = 0):
+async def list_companies(
+    session: AsyncSession = Depends(get_session),
+    limit: int = 20,
+    offset: int = 0,
+):
     return await crm_service.list_companies(session, limit=limit, offset=offset)
 
 
 @api_router.post("/companies", response_model=CompanyRead, status_code=status.HTTP_201_CREATED)
-async def create_company(payload: CompanyCreate, session: AsyncSession = Depends(get_session)):
+async def create_company(
+    payload: CompanyCreate,
+    session: AsyncSession = Depends(get_session),
+):
     return await crm_service.create_company(session, payload)
 
 
 @api_router.get("/companies/{company_id}", response_model=CompanyRead)
-async def get_company(company_id: int, session: AsyncSession = Depends(get_session)):
+async def get_company(
+    company_id: int,
+    session: AsyncSession = Depends(get_session),
+):
     company = await crm_service.get_company(session, company_id)
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
@@ -53,7 +63,11 @@ async def get_company(company_id: int, session: AsyncSession = Depends(get_sessi
 
 
 @api_router.patch("/companies/{company_id}", response_model=CompanyRead)
-async def update_company(company_id: int, payload: CompanyUpdate, session: AsyncSession = Depends(get_session)):
+async def update_company(
+    company_id: int,
+    payload: CompanyUpdate,
+    session: AsyncSession = Depends(get_session),
+):
     company = await crm_service.update_company(session, company_id, payload)
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
@@ -61,48 +75,83 @@ async def update_company(company_id: int, payload: CompanyUpdate, session: Async
 
 
 @api_router.delete("/companies/{company_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_company(company_id: int, session: AsyncSession = Depends(get_session)):
+async def delete_company(
+    company_id: int,
+    session: AsyncSession = Depends(get_session),
+):
     deleted = await crm_service.delete_company(session, company_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Company not found")
 
 
 @api_router.get("/companies/{company_id}/interactions", response_model=list[InteractionRead])
-async def list_interactions(company_id: int, session: AsyncSession = Depends(get_session)):
+async def list_interactions(
+    company_id: int,
+    session: AsyncSession = Depends(get_session),
+):
     return await crm_service.list_interactions(session, company_id)
 
 
-@api_router.post("/companies/{company_id}/interactions", response_model=InteractionRead, status_code=status.HTTP_201_CREATED)
-async def create_interaction(company_id: int, payload: InteractionCreate, session: AsyncSession = Depends(get_session)):
+@api_router.post(
+    "/companies/{company_id}/interactions",
+    response_model=InteractionRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_interaction(
+    company_id: int,
+    payload: InteractionCreate,
+    session: AsyncSession = Depends(get_session),
+):
     data = payload.model_dump()
     data["company_id"] = company_id
     return await crm_service.add_interaction(session, InteractionCreate(**data))
 
 
 @api_router.get("/companies/{company_id}/decision-makers", response_model=list[DecisionMakerRead])
-async def list_decision_makers(company_id: int, session: AsyncSession = Depends(get_session)):
+async def list_decision_makers(
+    company_id: int,
+    session: AsyncSession = Depends(get_session),
+):
     return await crm_service.list_decision_makers(session, company_id)
 
 
-@api_router.post("/companies/{company_id}/decision-makers", response_model=DecisionMakerRead, status_code=status.HTTP_201_CREATED)
-async def create_decision_maker(company_id: int, payload: DecisionMakerCreate, session: AsyncSession = Depends(get_session)):
+@api_router.post(
+    "/companies/{company_id}/decision-makers",
+    response_model=DecisionMakerRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_decision_maker(
+    company_id: int,
+    payload: DecisionMakerCreate,
+    session: AsyncSession = Depends(get_session),
+):
     data = payload.model_dump()
     data["company_id"] = company_id
     return await crm_service.add_decision_maker(session, DecisionMakerCreate(**data))
 
 
 @api_router.get("/tasks", response_model=list[FollowUpTaskRead])
-async def list_tasks(session: AsyncSession = Depends(get_session), status: str | None = None):
+async def list_tasks(
+    session: AsyncSession = Depends(get_session),
+    status: str | None = None,
+):
     return await crm_service.list_tasks(session, status=status)
 
 
 @api_router.post("/tasks", response_model=FollowUpTaskRead, status_code=status.HTTP_201_CREATED)
-async def create_task(payload: FollowUpTaskCreate, session: AsyncSession = Depends(get_session)):
+async def create_task(
+    payload: FollowUpTaskCreate,
+    session: AsyncSession = Depends(get_session),
+):
     return await crm_service.create_task(session, payload)
 
 
 @api_router.patch("/tasks/{task_id}", response_model=FollowUpTaskRead)
-async def update_task(task_id: int, payload: FollowUpTaskUpdate, session: AsyncSession = Depends(get_session)):
+async def update_task(
+    task_id: int,
+    payload: FollowUpTaskUpdate,
+    session: AsyncSession = Depends(get_session),
+):
     task = await crm_service.update_task(session, task_id, payload)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -110,13 +159,19 @@ async def update_task(task_id: int, payload: FollowUpTaskUpdate, session: AsyncS
 
 
 @api_router.post("/imports/csv")
-async def import_csv(file: UploadFile, session: AsyncSession = Depends(get_session)):
+async def import_csv(
+    file: UploadFile,
+    session: AsyncSession = Depends(get_session),
+):
     content = await file.read()
     return await import_companies_from_csv(session, content.decode("utf-8-sig"))
 
 
 @api_router.post("/companies/{company_id}/ai/call-prep")
-async def ai_call_prep(company_id: int, session: AsyncSession = Depends(get_session)):
+async def ai_call_prep(
+    company_id: int,
+    session: AsyncSession = Depends(get_session),
+):
     result = await prepare_cold_call(session, company_id)
     if not result:
         raise HTTPException(status_code=404, detail="Company not found")

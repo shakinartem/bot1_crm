@@ -119,9 +119,7 @@ name,legal_name,inn,ogrn,city,region,address,phone,website,social_links,maps_url
 
 ## Следующие этапы
 
-- Telegram-меню CRM.
-- Карточка компании с inline-кнопками.
-- Добавление компании через FSM.
-- Поиск по компаниям и ЛПР.
+- Стабилизировать Telegram CRM после последних изменений и зафиксировать smoke-check.
+- Добавить сценарии добавления ЛПР и контактов прямо из карточки компании.
 - История касаний и задачи менеджера в Telegram.
 - Интеграция с БОТ 2 Consultation AI.

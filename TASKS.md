@@ -2,12 +2,12 @@
 
 ## Current Sprint
 
-- [x] Repair formatting and syntax after stage 1 push.
-- [x] Validate Python imports and compileall.
-- [x] Validate Alembic migration formatting.
-- [x] Add Telegram CRM menu.
-- [x] Add company card inline buttons.
-- [x] Add company creation FSM.
+- [x] Repair damaged newlines and formatting in source files
+- [x] Validate Python syntax with compileall
+- [x] Validate requirements.txt and .env.example formatting
+- [x] Validate Alembic migration syntax
+- [x] Add smoke check script
+- [ ] Continue Telegram CRM workflows after stable launch
 
 ## Backlog
 

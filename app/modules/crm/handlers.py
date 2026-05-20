@@ -1,4 +1,5 @@
-from datetime import datetime
+from datetime import date
+from typing import Any
 
 from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
@@ -111,7 +112,7 @@ def company_actions(company_id: int) -> InlineKeyboardMarkup:
     )
 
 
-def company_list_markup(companies: list) -> InlineKeyboardMarkup:
+def company_list_markup(companies: list[Any]) -> InlineKeyboardMarkup:
     rows = [
         [
             InlineKeyboardButton(
@@ -124,19 +125,23 @@ def company_list_markup(companies: list) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def format_company_preview(company) -> str:
+def format_company_preview(company: Any) -> str:
     status = STATUS_LABELS.get(company.status, company.status)
     return f"#{company.id} {company.name} | {status} | {company.phone or 'без телефона'}"
 
 
-def format_tasks_digest(tasks: list) -> str:
+def format_tasks_digest(tasks: list[Any]) -> str:
     if not tasks:
         return "На сегодня открытых задач нет."
 
     lines = ["Задачи на сегодня и просроченные:"]
     for task in tasks:
         due_label = task.due_at.strftime("%d.%m %H:%M") if task.due_at else "без срока"
-        company_name = task.company.name if getattr(task, "company", None) else f"Компания #{task.company_id}"
+        company_name = (
+            task.company.name
+            if getattr(task, "company", None)
+            else f"Компания #{task.company_id}"
+        )
         lines.append(f"- [{due_label}] {task.title} — {company_name}")
     return "\n".join(lines)
 
@@ -155,12 +160,16 @@ def cleaned_optional(text: str | None) -> str | None:
     return value or None
 
 
-async def show_company_card(target, company_id: int) -> bool:
+async def show_company_card(target: Message, company_id: int) -> bool:
     async with async_session_factory() as session:
         company = await get_company(session, company_id)
     if not company:
         return False
-    await target.answer(format_company_card(company), parse_mode="HTML", reply_markup=company_actions(company_id))
+    await target.answer(
+        format_company_card(company),
+        parse_mode="HTML",
+        reply_markup=company_actions(company_id),
+    )
     return True
 
 
@@ -186,7 +195,11 @@ async def edit_company_card(message: Message, company_id: int) -> bool:
 @router.message(CommandStart())
 async def start(message: Message, state: FSMContext) -> None:
     await state.clear()
-    await message.answer("ШАРиК Sales Intelligence готов. Выберите действие.", reply_markup=main_menu())
+    await message.answer(
+        "ШАРиК Sales Intelligence готов.\n"
+        "Выберите действие.",
+        reply_markup=main_menu(),
+    )
 
 
 @router.message(Command("menu"))
@@ -218,7 +231,10 @@ async def new_company(message: Message) -> None:
     raw = (message.text or "").replace("/new_company", "", 1).strip()
     parts = [part.strip() for part in raw.split(";")]
     if not parts or not parts[0]:
-        await message.answer("Укажите минимум название: /new_company Клиника Улыбка; +79990000000; https://site.ru")
+        await message.answer(
+            "Укажите минимум название: "
+            "/new_company Клиника Улыбка; +79990000000; https://site.ru"
+        )
         return
 
     payload = CompanyCreate(
@@ -246,28 +262,40 @@ async def company_creation_name(message: Message, state: FSMContext) -> None:
 
     await state.update_data(name=name)
     await state.set_state(CompanyCreateStates.phone)
-    await message.answer("Введите телефон или нажмите «Пропустить».", reply_markup=flow_menu(allow_skip=True))
+    await message.answer(
+        "Введите телефон или нажмите «Пропустить».",
+        reply_markup=flow_menu(allow_skip=True),
+    )
 
 
 @router.message(CompanyCreateStates.phone)
 async def company_creation_phone(message: Message, state: FSMContext) -> None:
     await state.update_data(phone=None if is_skip(message.text) else cleaned_optional(message.text))
     await state.set_state(CompanyCreateStates.website)
-    await message.answer("Введите сайт компании или нажмите «Пропустить».", reply_markup=flow_menu(allow_skip=True))
+    await message.answer(
+        "Введите сайт компании или нажмите «Пропустить».",
+        reply_markup=flow_menu(allow_skip=True),
+    )
 
 
 @router.message(CompanyCreateStates.website)
 async def company_creation_website(message: Message, state: FSMContext) -> None:
     await state.update_data(website=None if is_skip(message.text) else cleaned_optional(message.text))
     await state.set_state(CompanyCreateStates.city)
-    await message.answer("Введите город или нажмите «Пропустить».", reply_markup=flow_menu(allow_skip=True))
+    await message.answer(
+        "Введите город или нажмите «Пропустить».",
+        reply_markup=flow_menu(allow_skip=True),
+    )
 
 
 @router.message(CompanyCreateStates.city)
 async def company_creation_city(message: Message, state: FSMContext) -> None:
     await state.update_data(city=None if is_skip(message.text) else cleaned_optional(message.text))
     await state.set_state(CompanyCreateStates.notes)
-    await message.answer("Добавьте заметку или нажмите «Пропустить».", reply_markup=flow_menu(allow_skip=True))
+    await message.answer(
+        "Добавьте заметку или нажмите «Пропустить».",
+        reply_markup=flow_menu(allow_skip=True),
+    )
 
 
 @router.message(CompanyCreateStates.notes)
@@ -311,7 +339,8 @@ async def search(message: Message, state: FSMContext) -> None:
     if not query:
         await state.set_state(CompanySearchStates.query)
         await message.answer(
-            "Введите название, телефон, ИНН, город, сайт или ФИО ЛПР.",
+            "Введите название, телефон, ИНН, город, сайт "
+            "или ФИО ЛПР.",
             reply_markup=flow_menu(),
         )
         return
@@ -328,7 +357,8 @@ async def search(message: Message, state: FSMContext) -> None:
 async def search_help(message: Message, state: FSMContext) -> None:
     await state.set_state(CompanySearchStates.query)
     await message.answer(
-        "Введите название, телефон, ИНН, город, сайт или ФИО ЛПР.",
+        "Введите название, телефон, ИНН, город, сайт "
+        "или ФИО ЛПР.",
         reply_markup=flow_menu(),
     )
 
@@ -367,7 +397,10 @@ async def call_result(message: Message) -> None:
     raw = (message.text or "").replace("/call_result", "", 1).strip()
     parts = [part.strip().lower() for part in raw.split(";")]
     if len(parts) < 2 or not parts[0].isdigit():
-        await message.answer("Формат: /call_result ID; недозвон|отказ|интересно|перезвонить|назначена консультация")
+        await message.answer(
+            "Формат: /call_result ID; "
+            "недозвон|отказ|интересно|перезвонить|назначена консультация"
+        )
         return
     async with async_session_factory() as session:
         company = await update_call_result(session, int(parts[0]), parts[1])
@@ -378,7 +411,7 @@ async def call_result(message: Message) -> None:
 async def today_tasks(message: Message) -> None:
     async with async_session_factory() as session:
         tasks = await list_tasks(session, status=TaskStatus.OPEN.value)
-        today = datetime.now().date()
+        today = date.today()
         due_tasks = [task for task in tasks if task.due_at and task.due_at.date() <= today]
 
     await message.answer(format_tasks_digest(due_tasks[:10]))

@@ -1,12 +1,12 @@
-"""expand crm core
+"""Expand CRM core.
 
 Revision ID: 0002_expand_crm_core
 Revises: 0001_initial
 Create Date: 2026-05-20
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0002_expand_crm_core"
 down_revision = "0001_initial"
@@ -15,15 +15,48 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("companies", sa.Column("region", sa.String(length=128), nullable=True))
-    op.add_column("companies", sa.Column("social_links", sa.Text(), nullable=True))
-    op.add_column("companies", sa.Column("priority", sa.String(length=32), nullable=False, server_default="medium"))
+    op.add_column(
+        "companies",
+        sa.Column("region", sa.String(length=128), nullable=True),
+    )
+    op.add_column(
+        "companies",
+        sa.Column("social_links", sa.Text(), nullable=True),
+    )
+    op.add_column(
+        "companies",
+        sa.Column(
+            "priority",
+            sa.String(length=32),
+            nullable=False,
+            server_default="medium",
+        ),
+    )
     op.create_index("ix_companies_region", "companies", ["region"])
     op.create_index("ix_companies_priority", "companies", ["priority"])
 
-    op.add_column("decision_makers", sa.Column("source", sa.String(length=128), nullable=True))
-    op.add_column("decision_makers", sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("(CURRENT_TIMESTAMP)"), nullable=False))
-    op.add_column("decision_makers", sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("(CURRENT_TIMESTAMP)"), nullable=False))
+    op.add_column(
+        "decision_makers",
+        sa.Column("source", sa.String(length=128), nullable=True),
+    )
+    op.add_column(
+        "decision_makers",
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            nullable=False,
+        ),
+    )
+    op.add_column(
+        "decision_makers",
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            nullable=False,
+        ),
+    )
     op.create_index("ix_decision_makers_full_name", "decision_makers", ["full_name"])
 
     op.create_table(
@@ -35,8 +68,18 @@ def upgrade() -> None:
         sa.Column("label", sa.String(length=128), nullable=True),
         sa.Column("is_primary", sa.Boolean(), nullable=False),
         sa.Column("notes", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("(CURRENT_TIMESTAMP)"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("(CURRENT_TIMESTAMP)"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("(CURRENT_TIMESTAMP)"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["company_id"], ["companies.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -60,9 +103,23 @@ def upgrade() -> None:
     op.create_index("ix_lead_interactions_type", "lead_interactions", ["type"])
     op.create_index("ix_lead_interactions_result", "lead_interactions", ["result"])
 
-    op.add_column("tasks", sa.Column("due_at", sa.DateTime(timezone=True), nullable=True))
-    op.add_column("tasks", sa.Column("priority", sa.String(length=32), nullable=False, server_default="medium"))
-    op.add_column("tasks", sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True))
+    op.add_column(
+        "tasks",
+        sa.Column("due_at", sa.DateTime(timezone=True), nullable=True),
+    )
+    op.add_column(
+        "tasks",
+        sa.Column(
+            "priority",
+            sa.String(length=32),
+            nullable=False,
+            server_default="medium",
+        ),
+    )
+    op.add_column(
+        "tasks",
+        sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
+    )
     op.create_index("ix_tasks_due_at", "tasks", ["due_at"])
     op.create_index("ix_tasks_status", "tasks", ["status"])
     op.create_index("ix_tasks_priority", "tasks", ["priority"])

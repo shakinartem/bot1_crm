@@ -33,13 +33,32 @@ class Company(Base):
     priority: Mapped[str] = mapped_column(String(32), default=LeadPriority.MEDIUM.value, index=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
 
-    decision_makers: Mapped[list["DecisionMaker"]] = relationship(back_populates="company", cascade="all, delete-orphan")
-    contacts: Mapped[list["ContactPoint"]] = relationship(back_populates="company", cascade="all, delete-orphan")
-    interactions: Mapped[list["LeadInteraction"]] = relationship(back_populates="company", cascade="all, delete-orphan")
-    tasks: Mapped[list["FollowUpTask"]] = relationship(back_populates="company", cascade="all, delete-orphan")
-    calls: Mapped[list["CallRecord"]] = relationship(back_populates="company", cascade="all, delete-orphan")
+    decision_makers: Mapped[list["DecisionMaker"]] = relationship(
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+    contacts: Mapped[list["ContactPoint"]] = relationship(
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+    interactions: Mapped[list["LeadInteraction"]] = relationship(
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+    tasks: Mapped[list["FollowUpTask"]] = relationship(
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+    calls: Mapped[list["CallRecord"]] = relationship(
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
 
 
 class DecisionMaker(Base):
@@ -56,7 +75,11 @@ class DecisionMaker(Base):
     is_primary: Mapped[bool] = mapped_column(Boolean, default=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
 
     company: Mapped[Company] = relationship(back_populates="decision_makers")
     interactions: Mapped[list["LeadInteraction"]] = relationship(back_populates="decision_maker")
@@ -73,7 +96,11 @@ class ContactPoint(Base):
     is_primary: Mapped[bool] = mapped_column(Boolean, default=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
 
     company: Mapped[Company] = relationship(back_populates="contacts")
 
@@ -83,7 +110,11 @@ class LeadInteraction(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     company_id: Mapped[int] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True)
-    decision_maker_id: Mapped[int | None] = mapped_column(ForeignKey("decision_makers.id", ondelete="SET NULL"), nullable=True, index=True)
+    decision_maker_id: Mapped[int | None] = mapped_column(
+        ForeignKey("decision_makers.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     type: Mapped[str] = mapped_column(String(64), index=True)
     result: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)

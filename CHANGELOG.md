@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Fixed damaged newline formatting across Python, markdown, env, and requirements files.
+- Fixed broken Russian text strings in Telegram handlers.
+- Added smoke_check.py for basic import validation.
+- Validated syntax with compileall.
 - Fixed source formatting/newline issues after CRM core expansion.
 - Fixed syntax risks in CRM services and migration files.
 - Fixed API handlers to avoid mutating Pydantic request payloads directly.

@@ -27,7 +27,12 @@ async def create_company(session: AsyncSession, payload: CompanyCreate) -> Compa
 
 
 async def list_companies(session: AsyncSession, limit: int = 20, offset: int = 0) -> list[Company]:
-    result = await session.execute(select(Company).order_by(Company.created_at.desc()).limit(limit).offset(offset))
+    result = await session.execute(
+        select(Company)
+        .order_by(Company.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
     return list(result.scalars().all())
 
 
@@ -130,7 +135,9 @@ async def add_interaction(session: AsyncSession, payload: InteractionCreate) -> 
 
 async def list_interactions(session: AsyncSession, company_id: int) -> list[LeadInteraction]:
     result = await session.execute(
-        select(LeadInteraction).where(LeadInteraction.company_id == company_id).order_by(LeadInteraction.created_at.desc())
+        select(LeadInteraction)
+        .where(LeadInteraction.company_id == company_id)
+        .order_by(LeadInteraction.created_at.desc())
     )
     return list(result.scalars().all())
 
@@ -241,13 +248,27 @@ def _interaction_result_for_call(value: str) -> str:
 def format_company_card(company: Company) -> str:
     dms = (
         "\n".join(
-            f"- {escape(dm.full_name)}, {escape(dm.role or 'роль не указана')} {escape(dm.phone or '')}".rstrip()
+            (
+                f"- {escape(dm.full_name)}, "
+                f"{escape(dm.role or 'роль не указана')} "
+                f"{escape(dm.phone or '')}"
+            ).rstrip()
             for dm in company.decision_makers
         )
         or "нет"
     )
-    contacts = "\n".join(f"- {escape(contact.type)}: {escape(contact.value)}" for contact in company.contacts) or "нет"
-    last_interaction = escape(company.interactions[0].summary) if company.interactions and company.interactions[0].summary else "нет"
+    contacts = (
+        "\n".join(
+            f"- {escape(contact.type)}: {escape(contact.value)}"
+            for contact in company.contacts
+        )
+        or "нет"
+    )
+    last_interaction = (
+        escape(company.interactions[0].summary)
+        if company.interactions and company.interactions[0].summary
+        else "нет"
+    )
     next_task = next((task for task in company.tasks if task.status == TaskStatus.OPEN.value), None)
     next_action = escape(next_task.title) if next_task else "нет"
 
