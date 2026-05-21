@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -155,3 +156,9 @@ class FollowUpTaskRead(FollowUpTaskCreate):
     priority: str
     created_at: datetime
     completed_at: datetime | None = None
+
+
+class Bot2ConsultationResultCreate(BaseModel):
+    result: Literal["refused", "thinking", "contract_sent", "signed"]
+    summary: str = Field(min_length=1)
+    source: str = Field(default="bot2", min_length=1)

@@ -1,11 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.database import get_session
 from app.modules.ai.service import prepare_cold_call
 from app.modules.crm import service as crm_service
 from app.modules.crm.schemas import (
+    Bot2ConsultationResultCreate,
     CompanyCreate,
     CompanyRead,
     CompanyUpdate,
@@ -16,6 +18,15 @@ from app.modules.crm.schemas import (
     FollowUpTaskUpdate,
     InteractionCreate,
     InteractionRead,
+)
+from app.modules.digest.schemas import DailyDigestRead, LeadDigestItem, TaskDigestItem, WeeklySummaryRead
+from app.modules.digest.service import (
+    build_daily_digest,
+    build_weekly_summary,
+    get_hot_leads,
+    get_overdue_tasks,
+    get_stale_leads,
+    get_today_tasks,
 )
 from app.modules.exports.service import ExportFilters, export_companies_to_csv
 from app.modules.imports.service import import_companies_from_csv, preview_companies_from_csv, save_import_file
@@ -29,6 +40,16 @@ async def root_health() -> dict[str, str]:
 
 
 api_router = APIRouter(prefix="/api")
+bot2_router = APIRouter(prefix="/api/bot2")
+
+
+async def require_bot2_auth(authorization: str | None = Header(default=None)) -> None:
+    settings = get_settings()
+    if not settings.bot2_api_token:
+        return
+    expected = f"Bearer {settings.bot2_api_token}"
+    if authorization != expected:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid BOT2 API token")
 
 
 @api_router.get("/health")
@@ -39,10 +60,20 @@ async def api_health() -> dict[str, str]:
 @api_router.get("/companies", response_model=list[CompanyRead])
 async def list_companies(
     session: AsyncSession = Depends(get_session),
+    status: str | None = None,
+    city: str | None = None,
+    priority: str | None = None,
     limit: int = 20,
     offset: int = 0,
 ):
-    return await crm_service.list_companies(session, limit=limit, offset=offset)
+    return await crm_service.list_companies(
+        session,
+        limit=limit,
+        offset=offset,
+        status=status,
+        city=city,
+        priority=priority,
+    )
 
 
 @api_router.post("/companies", response_model=CompanyRead, status_code=status.HTTP_201_CREATED)
@@ -77,6 +108,55 @@ async def export_companies(
         media_type="text/csv",
         filename=result.filename,
     )
+
+
+@api_router.get("/digest/daily", response_model=DailyDigestRead)
+async def digest_daily(
+    session: AsyncSession = Depends(get_session),
+    manager_id: int | None = None,
+):
+    return await build_daily_digest(session, manager_id=manager_id)
+
+
+@api_router.get("/digest/weekly", response_model=WeeklySummaryRead)
+async def digest_weekly(
+    session: AsyncSession = Depends(get_session),
+    manager_id: int | None = None,
+):
+    return await build_weekly_summary(session, manager_id=manager_id)
+
+
+@api_router.get("/digest/overdue-tasks", response_model=list[TaskDigestItem])
+async def digest_overdue_tasks(
+    session: AsyncSession = Depends(get_session),
+    limit: int = 20,
+):
+    return await get_overdue_tasks(session, limit=limit)
+
+
+@api_router.get("/digest/today-tasks", response_model=list[TaskDigestItem])
+async def digest_today_tasks(
+    session: AsyncSession = Depends(get_session),
+    limit: int = 20,
+):
+    return await get_today_tasks(session, limit=limit)
+
+
+@api_router.get("/digest/hot-leads", response_model=list[LeadDigestItem])
+async def digest_hot_leads(
+    session: AsyncSession = Depends(get_session),
+    limit: int = 20,
+):
+    return await get_hot_leads(session, limit=limit)
+
+
+@api_router.get("/digest/stale-leads", response_model=list[LeadDigestItem])
+async def digest_stale_leads(
+    session: AsyncSession = Depends(get_session),
+    days_without_interaction: int = 7,
+    limit: int = 20,
+):
+    return await get_stale_leads(session, days_without_interaction=days_without_interaction, limit=limit)
 
 
 @api_router.get("/companies/{company_id}", response_model=CompanyRead)
@@ -254,4 +334,34 @@ async def ai_call_prep(
     return {"company_id": company_id, "call_prep": result}
 
 
+@bot2_router.get(
+    "/consultation-ready",
+    response_model=list[CompanyRead],
+    dependencies=[Depends(require_bot2_auth)],
+)
+async def bot2_consultation_ready(
+    session: AsyncSession = Depends(get_session),
+    limit: int = 100,
+    offset: int = 0,
+):
+    return await crm_service.list_bot2_consultation_ready(session, limit=limit, offset=offset)
+
+
+@bot2_router.post(
+    "/companies/{company_id}/consultation-result",
+    response_model=CompanyRead,
+    dependencies=[Depends(require_bot2_auth)],
+)
+async def bot2_consultation_result(
+    company_id: int,
+    payload: Bot2ConsultationResultCreate,
+    session: AsyncSession = Depends(get_session),
+):
+    company = await crm_service.apply_bot2_consultation_result(session, company_id, payload)
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+    return company
+
+
 router.include_router(api_router)
+router.include_router(bot2_router)

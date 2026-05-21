@@ -4,9 +4,9 @@
 
 - [ ] Real Bot 2 API integration
 - [ ] Contract generation draft
-- [ ] Manager daily digest
 - [ ] Lead source analytics
 - [ ] Website/social research enrichment
+- [ ] Manager roles and multi-user CRM
 
 ## Backlog
 
@@ -31,6 +31,24 @@
 - Company markdown export
 - Handoff payload v2
 - Handoff JSON export
+- Company filters by status/city/priority
+- Bot 2 handoff API ready
+- Bot 2 handoff smoke check
+- Manager daily digest
+- Overdue tasks screen
+- Today tasks screen
+- Hot leads prioritization
+- Stale leads screen
+- Weekly sales summary
+- Digest Telegram commands
+- Digest API endpoints
+- AI/rule-based daily recommendation
+- Automatic morning digest
+- Digest settings
+- Bot 2 handoff API via `/api/bot2/*`
+- Bot 2 consultation result -> CRM status / interaction / follow-up task mapping
+- `GET /api/companies` filters by status/city/priority
+- `scripts/smoke_bot2_handoff.py`
 - MVP FastAPI + aiogram + SQLAlchemy + Alembic
 - AI abstraction layer for OpenRouter, Ollama, and fallback
 - Expanded CRM core with contacts, richer interactions, statuses, and tasks

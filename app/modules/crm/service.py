@@ -7,6 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.modules.crm.constants import (
+    BOT2_READY_STATUS,
+    BOT2_RESULT_TO_COMPANY_STATUS,
+    BOT2_RESULT_TO_INTERACTION_RESULT,
     COMPANY_STATUS_LABELS,
     CONTACT_TYPE_LABELS,
     INTERACTION_RESULT_LABELS,
@@ -20,6 +23,7 @@ from app.modules.crm.constants import (
 )
 from app.modules.crm.models import Company, ContactPoint, DecisionMaker, FollowUpTask, LeadInteraction
 from app.modules.crm.schemas import (
+    Bot2ConsultationResultCreate,
     CompanyCreate,
     CompanyUpdate,
     ContactPointCreate,
@@ -82,13 +86,24 @@ async def create_company(session: AsyncSession, payload: CompanyCreate) -> Compa
     return company
 
 
-async def list_companies(session: AsyncSession, limit: int = 20, offset: int = 0) -> list[Company]:
-    result = await session.execute(
-        select(Company)
-        .order_by(Company.created_at.desc())
-        .limit(limit)
-        .offset(offset)
-    )
+async def list_companies(
+    session: AsyncSession,
+    limit: int = 20,
+    offset: int = 0,
+    *,
+    status: str | None = None,
+    city: str | None = None,
+    priority: str | None = None,
+) -> list[Company]:
+    stmt = select(Company).order_by(Company.created_at.desc()).limit(limit).offset(offset)
+    if status:
+        stmt = stmt.where(Company.status == status)
+    if city:
+        stmt = stmt.where(Company.city == city)
+    if priority:
+        stmt = stmt.where(Company.priority == priority)
+
+    result = await session.execute(stmt)
     return list(result.scalars().all())
 
 
@@ -107,6 +122,20 @@ async def list_companies_by_status(
         .offset(offset)
     )
     return list(result.scalars().all())
+
+
+async def list_bot2_consultation_ready(
+    session: AsyncSession,
+    *,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[Company]:
+    return await list_companies_by_status(
+        session,
+        BOT2_READY_STATUS,
+        limit=limit,
+        offset=offset,
+    )
 
 
 async def get_company(session: AsyncSession, company_id: int) -> Company | None:
@@ -349,6 +378,59 @@ async def create_task(session: AsyncSession, payload: FollowUpTaskCreate) -> Fol
     return task
 
 
+async def apply_bot2_consultation_result(
+    session: AsyncSession,
+    company_id: int,
+    payload: Bot2ConsultationResultCreate,
+) -> Company | None:
+    company = await get_company(session, company_id)
+    if not company:
+        return None
+
+    company.status = BOT2_RESULT_TO_COMPANY_STATUS[payload.result]
+    session.add(company)
+
+    interaction = LeadInteraction(
+        company_id=company_id,
+        type=InteractionType.CONSULTATION.value,
+        result=BOT2_RESULT_TO_INTERACTION_RESULT[payload.result],
+        summary=payload.summary,
+        created_by=payload.source or "bot2",
+    )
+    session.add(interaction)
+
+    if payload.result == "thinking":
+        due_at = datetime.utcnow() + timedelta(days=3)
+        session.add(
+            FollowUpTask(
+                company_id=company_id,
+                title="Повторно связаться после консультации",
+                description=payload.summary,
+                due_at=due_at,
+                due_date=due_at,
+                status=TaskStatus.OPEN.value,
+                priority=LeadPriority.MEDIUM.value,
+            )
+        )
+    elif payload.result == "contract_sent":
+        due_at = datetime.utcnow() + timedelta(days=2)
+        session.add(
+            FollowUpTask(
+                company_id=company_id,
+                title="Проверить статус договора",
+                description=payload.summary,
+                due_at=due_at,
+                due_date=due_at,
+                status=TaskStatus.OPEN.value,
+                priority=LeadPriority.MEDIUM.value,
+            )
+        )
+
+    await session.commit()
+    await session.refresh(company)
+    return company
+
+
 async def create_company_task(
     session: AsyncSession,
     company_id: int,
@@ -427,11 +509,51 @@ async def update_task(session: AsyncSession, task_id: int, payload: FollowUpTask
 
 
 async def complete_task(session: AsyncSession, task_id: int) -> FollowUpTask | None:
-    return await update_task(
-        session,
-        task_id,
-        FollowUpTaskUpdate(status=TaskStatus.DONE, completed_at=datetime.utcnow()),
+    task = await get_task(session, task_id)
+    if not task:
+        return None
+
+    task.status = TaskStatus.DONE.value
+    task.completed_at = datetime.utcnow()
+    session.add(task)
+    session.add(
+        LeadInteraction(
+            company_id=task.company_id,
+            type=InteractionType.NOTE.value,
+            summary=f"Задача выполнена: {task.title}",
+            created_by="telegram",
+        )
     )
+    await session.commit()
+    await session.refresh(task)
+    return task
+
+
+async def snooze_task(
+    session: AsyncSession,
+    task_id: int,
+    due_at: datetime,
+    *,
+    created_by: str | None = "telegram",
+) -> FollowUpTask | None:
+    task = await get_task(session, task_id)
+    if not task:
+        return None
+
+    task.due_at = due_at
+    task.due_date = due_at
+    session.add(task)
+    session.add(
+        LeadInteraction(
+            company_id=task.company_id,
+            type=InteractionType.NOTE.value,
+            summary=f"Задача перенесена: {task.title} -> {format_datetime(due_at)}",
+            created_by=created_by,
+        )
+    )
+    await session.commit()
+    await session.refresh(task)
+    return task
 
 
 async def get_task_dashboard(

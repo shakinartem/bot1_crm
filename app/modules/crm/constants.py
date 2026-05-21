@@ -61,6 +61,23 @@ class TaskStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+BOT2_READY_STATUS = CompanyStatus.CONSULTATION_PLANNED.value
+
+BOT2_RESULT_TO_COMPANY_STATUS = {
+    "refused": CompanyStatus.DEAL_LOST.value,
+    "thinking": CompanyStatus.INTERESTED.value,
+    "contract_sent": CompanyStatus.PROPOSAL_SENT.value,
+    "signed": CompanyStatus.DEAL_WON.value,
+}
+
+BOT2_RESULT_TO_INTERACTION_RESULT = {
+    "refused": InteractionResult.REJECTED.value,
+    "thinking": InteractionResult.INTERESTED.value,
+    "contract_sent": InteractionResult.PROPOSAL_REQUESTED.value,
+    "signed": InteractionResult.DEAL_WON.value,
+}
+
+
 COMPANY_STATUS_LABELS = {
     CompanyStatus.NEW.value: "Новый лид",
     CompanyStatus.RESEARCH_NEEDED.value: "Нужен ресерч",
