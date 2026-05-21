@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Added company export workflow in Telegram.
+- Added CSV export with CRM filters.
+- Added consultation package preview for company cards.
+- Added AI mini-audit/proposal draft generation.
+- Added single-company markdown export.
+- Improved Bot 2 handoff payload and JSON export.
 - Added CSV import preview workflow in Telegram.
 - Added column mapping for Russian and English CSV headers.
 - Added deduplication rules for INN, OGRN, phone, website, and name+city.

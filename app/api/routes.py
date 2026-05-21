@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
@@ -16,6 +17,7 @@ from app.modules.crm.schemas import (
     InteractionCreate,
     InteractionRead,
 )
+from app.modules.exports.service import ExportFilters, export_companies_to_csv
 from app.modules.imports.service import import_companies_from_csv, preview_companies_from_csv, save_import_file
 
 router = APIRouter()
@@ -49,6 +51,32 @@ async def create_company(
     session: AsyncSession = Depends(get_session),
 ):
     return await crm_service.create_company(session, payload)
+
+
+@api_router.get("/companies/export")
+async def export_companies(
+    session: AsyncSession = Depends(get_session),
+    status: str | None = None,
+    city: str | None = None,
+    source: str | None = None,
+    priority: str | None = None,
+    limit: int | None = None,
+):
+    result = await export_companies_to_csv(
+        session,
+        ExportFilters(
+            status=status,
+            city=city,
+            source=source,
+            priority=priority,
+            limit=limit,
+        ),
+    )
+    return FileResponse(
+        result.file_path,
+        media_type="text/csv",
+        filename=result.filename,
+    )
 
 
 @api_router.get("/companies/{company_id}", response_model=CompanyRead)

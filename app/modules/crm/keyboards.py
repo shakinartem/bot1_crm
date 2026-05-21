@@ -27,7 +27,8 @@ def main_menu() -> ReplyKeyboardMarkup:
         [KeyboardButton(text="Компании"), KeyboardButton(text="Добавить компанию")],
         [KeyboardButton(text="Поиск"), KeyboardButton(text="Импорт CSV")],
         [KeyboardButton(text="Задачи на сегодня"), KeyboardButton(text="AI-подготовка к звонку")],
-        [KeyboardButton(text="Статистика"), KeyboardButton(text="Настройки")],
+        [KeyboardButton(text="Статистика"), KeyboardButton(text="📤 Экспорт")],
+        [KeyboardButton(text="Настройки")],
     ]
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
 
@@ -71,7 +72,11 @@ def company_actions(company_id: int) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="📜 История", callback_data=f"company:history:{company_id}:0"),
                 InlineKeyboardButton(text="🤖 AI-подготовка", callback_data=f"company:ai:{company_id}"),
             ],
-            [InlineKeyboardButton(text="🚀 Передать в консультацию", callback_data=f"company:handoff:{company_id}")],
+            [
+                InlineKeyboardButton(text="📦 Пакет консультации", callback_data=f"consult:package:{company_id}"),
+                InlineKeyboardButton(text="📤 Экспортировать компанию", callback_data=f"consult:export_company:{company_id}"),
+            ],
+            [InlineKeyboardButton(text="🚀 Подготовить передачу в БОТ 2", callback_data=f"consult:handoff:{company_id}")],
             [InlineKeyboardButton(text="⬅️ Назад", callback_data="company:list")],
         ]
     )

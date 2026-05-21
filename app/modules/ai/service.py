@@ -1,8 +1,9 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.ai.prompts import build_cold_call_prompt
+from app.config import get_settings
+from app.modules.ai.prompts import build_cold_call_prompt, build_fallback_mini_audit, build_mini_audit_prompt
 from app.modules.ai.providers import get_ai_provider
-from app.modules.crm.service import get_company
+from app.modules.crm.service import get_company, get_company_last_interactions, humanize_company_status
 
 
 async def prepare_cold_call(session: AsyncSession, company_id: int) -> str | None:
@@ -11,3 +12,34 @@ async def prepare_cold_call(session: AsyncSession, company_id: int) -> str | Non
         return None
     prompt = build_cold_call_prompt(company)
     return await get_ai_provider().generate(prompt)
+
+
+async def generate_mini_audit(session: AsyncSession, company_id: int) -> str | None:
+    company = await get_company(session, company_id)
+    if not company:
+        return None
+
+    interactions = await get_company_last_interactions(session, company_id, limit=5)
+    company_context = {
+        "name": company.name,
+        "city": company.city,
+        "website": company.website,
+        "status": company.status,
+        "status_label": humanize_company_status(company.status),
+        "source": company.source,
+        "notes": company.notes,
+        "recent_interactions": "\n".join(
+            f"- {item.created_at:%Y-%m-%d}: {item.summary or 'без комментария'}"
+            for item in interactions
+        )
+        or "нет данных",
+    }
+
+    if get_settings().ai_provider.lower() == "fallback":
+        return build_fallback_mini_audit(company_context)
+
+    prompt = build_mini_audit_prompt(company_context)
+    try:
+        return await get_ai_provider().generate(prompt)
+    except Exception:
+        return build_fallback_mini_audit(company_context)

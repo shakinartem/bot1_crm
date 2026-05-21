@@ -4,17 +4,17 @@
 
 - [ ] Real Bot 2 API integration
 - [ ] Contract generation draft
-- [ ] Export companies
 - [ ] Manager daily digest
 - [ ] Lead source analytics
+- [ ] Website/social research enrichment
 
 ## Backlog
 
-- Добавить пошаговое добавление компании через FSM.
-- Добавить Telegram-кнопки карточки компании.
-- Добавить сценарий добавления ЛПР из карточки.
-- Добавить сценарий добавления контакта из карточки.
-- Добавить список задач на сегодня.
+- Add task reschedule workflow in Telegram.
+- Split `app/api/routes.py` into domain modules.
+- Move Telegram handlers into a more modular package structure.
+- Add repository layer after service stabilization.
+- Add tests for CRM services, export, handoff, and API.
 
 ## Done
 
@@ -24,43 +24,27 @@
 - CSV import report
 - CRM statistics screen
 - Consultation handoff payload draft
-- Создан MVP FastAPI + aiogram + SQLAlchemy + Alembic.
-- Добавлен AI abstraction layer для OpenRouter, Ollama и fallback.
-- Добавлен CSV импорт с дедупликацией.
-- Этап 1: расширено CRM-ядро, добавлены `ContactPoint`, новые поля ЛПР, взаимодействий и задач.
-- Этап 1: добавлены `PROJECT_CONTEXT.md`, `TASKS.md`, `CHANGELOG.md`.
-- Этап 1: исправлена кодировка пользовательских сообщений в текущих Telegram handlers.
-- Stabilization: repaired source formatting, syntax risks, API payload handling, and Alembic batch settings.
-- Telegram CRM: added main menu flows, company card inline actions, tasks digest, and step-by-step company creation FSM.
-- improved company card
-- added company inline actions
-- added call result workflow
-- added note workflow
-- added decision maker workflow
-- added contact workflow
-- added status change workflow
-- added task workflow
-- added company history view
-- improved today tasks view
-- improved search
-- connected AI call prep from company card
+- Company CSV export
+- Export filters by status/city/source/priority
+- Single company consultation package
+- Mini audit AI draft
+- Company markdown export
+- Handoff payload v2
+- Handoff JSON export
+- MVP FastAPI + aiogram + SQLAlchemy + Alembic
+- AI abstraction layer for OpenRouter, Ollama, and fallback
+- Expanded CRM core with contacts, richer interactions, statuses, and tasks
+- Telegram CRM flows for company cards, tasks, notes, contacts, decision makers, search, and AI call prep
 
 ## Bugs
 
-- Проверить кодировку сообщений Telegram в Windows-консоли после правок.
-- Проверить Alembic batch migration на чистой SQLite и существующей базе.
-
-## Technical Debt
-
-- Постепенно разделить `app/api/routes.py` на модули `companies`, `interactions`, `decision_makers`, `tasks`, `imports`, `ai`.
-- Вынести Telegram handlers в структуру `app/bot/handlers` без резкого переноса.
-- Добавить repository-слой после стабилизации сервисов.
-- Добавить тесты для CSV импорта, CRM сервисов и API.
+- Recheck Telegram text rendering on Windows console after future edits.
+- Recheck Alembic batch migration behavior on clean SQLite and existing DB.
 
 ## Future Integrations
 
-- Передача клиента в БОТ 2 Consultation AI через API/events/export.
-- Парсинг карт и обогащение клиник.
-- Проверка юр. данных через ФНС.
-- Транскрибация через `faster-whisper` или `whisper.cpp`.
-- Интеграция телефонии.
+- Bot 2 Consultation AI handoff via real API/events/export.
+- Clinic enrichment from website/social/maps research.
+- Legal-data verification via ФНС.
+- Transcription via `faster-whisper` or `whisper.cpp`.
+- Telephony integration.

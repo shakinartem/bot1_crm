@@ -124,6 +124,10 @@ async def get_company(session: AsyncSession, company_id: int) -> Company | None:
     return result.scalar_one_or_none()
 
 
+async def get_company_full_context(session: AsyncSession, company_id: int) -> Company | None:
+    return await get_company(session, company_id)
+
+
 async def update_company(session: AsyncSession, company_id: int, payload: CompanyUpdate) -> Company | None:
     company = await get_company(session, company_id)
     if not company:
@@ -248,6 +252,20 @@ async def list_interactions(
     return list(result.scalars().all())
 
 
+async def get_company_last_interactions(
+    session: AsyncSession,
+    company_id: int,
+    *,
+    limit: int = 10,
+) -> list[LeadInteraction]:
+    return await list_interactions(session, company_id, limit=limit)
+
+
+async def get_company_last_interaction(session: AsyncSession, company_id: int) -> LeadInteraction | None:
+    interactions = await get_company_last_interactions(session, company_id, limit=1)
+    return interactions[0] if interactions else None
+
+
 async def create_note_interaction(
     session: AsyncSession,
     company_id: int,
@@ -261,6 +279,32 @@ async def create_note_interaction(
         type=InteractionType.NOTE,
         summary=summary,
         next_action=next_action,
+        created_by=created_by,
+    )
+    return await add_interaction(session, payload)
+
+
+async def save_company_note(
+    session: AsyncSession,
+    company_id: int,
+    text: str,
+    *,
+    created_by: str | None = "telegram",
+) -> LeadInteraction:
+    return await create_note_interaction(session, company_id, text, created_by=created_by)
+
+
+async def save_proposal_draft(
+    session: AsyncSession,
+    company_id: int,
+    text: str,
+    *,
+    created_by: str | None = "telegram",
+) -> LeadInteraction:
+    payload = InteractionCreate(
+        company_id=company_id,
+        type=InteractionType.PROPOSAL,
+        summary=text,
         created_by=created_by,
     )
     return await add_interaction(session, payload)
@@ -335,6 +379,23 @@ async def list_tasks(session: AsyncSession, status: str | None = None) -> list[F
 
     result = await session.execute(stmt)
     return list(result.scalars().all())
+
+
+async def get_company_open_tasks(session: AsyncSession, company_id: int) -> list[FollowUpTask]:
+    result = await session.execute(
+        select(FollowUpTask)
+        .where(
+            FollowUpTask.company_id == company_id,
+            FollowUpTask.status == TaskStatus.OPEN.value,
+        )
+        .order_by(FollowUpTask.due_at.asc().nulls_last(), FollowUpTask.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+async def get_company_next_task(session: AsyncSession, company_id: int) -> FollowUpTask | None:
+    tasks = await get_company_open_tasks(session, company_id)
+    return tasks[0] if tasks else None
 
 
 async def get_task(session: AsyncSession, task_id: int) -> FollowUpTask | None:
@@ -477,6 +538,128 @@ async def record_call_result(
 async def update_call_result(session: AsyncSession, company_id: int, result: str) -> Company | None:
     company, _ = await record_call_result(session, company_id, result)
     return company
+
+
+async def get_latest_proposal_draft(session: AsyncSession, company_id: int) -> LeadInteraction | None:
+    result = await session.execute(
+        select(LeadInteraction)
+        .where(
+            LeadInteraction.company_id == company_id,
+            LeadInteraction.type == InteractionType.PROPOSAL.value,
+        )
+        .order_by(LeadInteraction.created_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+async def build_company_consultation_package(session: AsyncSession, company_id: int) -> dict[str, str] | None:
+    company = await get_company_full_context(session, company_id)
+    if not company:
+        return None
+
+    from app.modules.ai.service import prepare_cold_call  # local import to avoid circular dependency
+
+    interactions = await get_company_last_interactions(session, company_id, limit=10)
+    next_task = await get_company_next_task(session, company_id)
+    latest_proposal = await get_latest_proposal_draft(session, company_id)
+    ai_call_prep = await prepare_cold_call(session, company_id)
+
+    next_step = "Уточнить следующий шаг вручную."
+    if next_task:
+        next_step = next_task.title
+        if next_task.due_at:
+            next_step = f"{next_step} ({format_datetime(next_task.due_at)})"
+    elif interactions and interactions[0].next_action:
+        next_step = interactions[0].next_action
+
+    decision_makers_text = "\n".join(
+        [
+            f"- {dm.full_name}; {dm.role or 'роль не указана'}; "
+            f"телефон: {dm.phone or 'нет'}; email: {dm.email or 'нет'}; "
+            f"telegram: {dm.telegram or 'нет'}; комментарии: {dm.notes or 'нет'}"
+            for dm in company.decision_makers[:10]
+        ]
+    ) or "- нет"
+
+    contacts_text = "\n".join(
+        [
+            f"- {humanize_contact_type(contact.type)}: {contact.value}"
+            f"{f' ({contact.label})' if contact.label else ''}"
+            for contact in company.contacts[:10]
+        ]
+    ) or "- нет"
+
+    history_text = "\n".join(
+        [
+            f"- {format_datetime(item.created_at)} | {humanize_interaction_type(item.type)}"
+            f"{f' | {humanize_interaction_result(item.result)}' if item.result else ''}"
+            f" | {item.summary or 'без комментария'}"
+            for item in interactions
+        ]
+    ) or "- касаний пока нет"
+
+    task_text = (
+        f"{next_task.title} ({format_datetime(next_task.due_at) if next_task and next_task.due_at else 'без срока'})"
+        if next_task
+        else "нет"
+    )
+    latest_proposal_text = latest_proposal.summary if latest_proposal else "еще не сгенерирован"
+
+    plain_text = (
+        f"📦 Пакет консультации: {company.name}\n\n"
+        f"1. Данные клиники\n"
+        f"- Название: {company.name}\n"
+        f"- Юр. название: {company.legal_name or 'нет'}\n"
+        f"- ИНН: {company.inn or 'нет'}\n"
+        f"- Город: {company.city or 'нет'}\n"
+        f"- Адрес: {company.address or 'нет'}\n"
+        f"- Сайт: {company.website or 'нет'}\n"
+        f"- Телефон: {company.phone or 'нет'}\n"
+        f"- Источник: {company.source or 'не указан'}\n\n"
+        f"2. ЛПР\n{decision_makers_text}\n\n"
+        f"3. Контакты\n{contacts_text}\n\n"
+        f"4. История касаний\n{history_text}\n\n"
+        f"5. Текущий статус продажи\n"
+        f"- Статус: {humanize_company_status(company.status)}\n"
+        f"- Приоритет: {humanize_priority(company.priority)}\n"
+        f"- Следующая задача: {task_text}\n"
+        f"- Заметки менеджера: {company.notes or 'нет'}\n\n"
+        f"6. AI-подготовка к звонку\n{ai_call_prep or 'нет'}\n\n"
+        f"7. Рекомендация следующего шага\n{next_step}\n\n"
+        f"8. Мини-аудит / КП\n{latest_proposal_text}"
+    )
+
+    markdown_text = (
+        "# Пакет консультации\n\n"
+        "## Компания\n"
+        f"- Название: {company.name}\n"
+        f"- Юр. название: {company.legal_name or 'нет'}\n"
+        f"- ИНН: {company.inn or 'нет'}\n"
+        f"- Город: {company.city or 'нет'}\n"
+        f"- Регион: {company.region or 'нет'}\n"
+        f"- Адрес: {company.address or 'нет'}\n"
+        f"- Телефон: {company.phone or 'нет'}\n"
+        f"- Сайт: {company.website or 'нет'}\n"
+        f"- Источник: {company.source or 'не указан'}\n"
+        f"- Статус: {humanize_company_status(company.status)}\n"
+        f"- Приоритет: {humanize_priority(company.priority)}\n\n"
+        f"## ЛПР\n{decision_makers_text}\n\n"
+        f"## Контакты\n{contacts_text}\n\n"
+        f"## История касаний\n{history_text}\n\n"
+        f"## Задачи\n- Следующая задача: {task_text}\n\n"
+        f"## AI-подготовка\n{ai_call_prep or 'нет'}\n\n"
+        f"## Мини-аудит / КП\n{latest_proposal_text}\n"
+    )
+
+    return {
+        "title": f"Пакет консультации: {company.name}",
+        "text": plain_text,
+        "markdown": markdown_text,
+        "recommended_next_step": next_step,
+        "ai_call_prep": ai_call_prep or "",
+        "latest_proposal": latest_proposal_text,
+    }
 
 
 def normalize_call_result(value: str) -> str:
