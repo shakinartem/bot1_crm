@@ -1,3 +1,5 @@
+import json
+
 from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandStart
@@ -7,6 +9,7 @@ from aiogram.types import CallbackQuery, Message
 from app.database import async_session_factory
 from app.modules.ai.service import prepare_cold_call
 from app.modules.crm.constants import CONTACT_TYPE_LABELS, ContactType
+from app.modules.crm.handoff import build_consultation_handoff_payload
 from app.modules.crm.keyboards import (
     CANCEL_TEXT,
     NO_TEXT,
@@ -21,7 +24,10 @@ from app.modules.crm.keyboards import (
     follow_up_task_prompt_markup,
     history_markup,
     main_menu,
+    stats_markup,
+    stats_company_list_markup,
     status_options_markup,
+    stats_tasks_markup,
     today_tasks_markup,
     yes_no_menu,
 )
@@ -37,12 +43,14 @@ from app.modules.crm.service import (
     format_company_card,
     format_datetime,
     get_company,
+    get_crm_statistics,
     get_task,
     get_task_dashboard,
     humanize_company_status,
     humanize_interaction_result,
     humanize_interaction_type,
     list_companies,
+    list_companies_by_status,
     list_interactions,
     parse_due_at_input,
     record_call_result,
@@ -127,6 +135,68 @@ def _render_task_section(title: str, icon: str, tasks: list) -> list[str]:
     return lines
 
 
+def _render_stats_text(stats: dict) -> str:
+    status_counts = stats["status_counts"]
+    ordered_statuses = [
+        "new",
+        "research_needed",
+        "prepared",
+        "call_planned",
+        "interested",
+        "consultation_planned",
+        "proposal_sent",
+        "deal_won",
+        "deal_lost",
+    ]
+
+    lines = [
+        "📊 CRM-статистика",
+        "",
+        f"🏥 Всего компаний: {stats['total_companies']}",
+        "",
+        "По статусам:",
+    ]
+    for status in ordered_statuses:
+        lines.append(f"• {humanize_company_status(status)}: {status_counts.get(status, 0)}")
+
+    lines.extend(
+        [
+            "",
+            "📌 Задачи:",
+            f"• Открыто: {stats['open_tasks']}",
+            f"• Просрочено: {stats['overdue_tasks']}",
+            f"• Сегодня: {stats['today_tasks']}",
+            "",
+            "📞 Касания:",
+            f"• Сегодня: {stats['touches_today']}",
+            f"• 7 дней: {stats['touches_last_7_days']}",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _render_status_companies(title: str, companies: list) -> str:
+    lines = [title, ""]
+    if not companies:
+        lines.append("Список пуст.")
+        return "\n".join(lines)
+
+    for company in companies:
+        lines.append(f"#{company.id} {company.name} — {company.city or 'город не указан'}")
+    return "\n".join(lines)
+
+
+def _render_handoff_preview(payload: dict) -> str:
+    body = json.dumps(payload, ensure_ascii=False, indent=2)
+    if len(body) > 3200:
+        body = body[:3200] + "\n... (payload truncated)"
+    return (
+        "🚀 Черновик передачи в консультацию\n\n"
+        f"<pre>{escape(body)}</pre>\n\n"
+        "Интеграция с БОТ 2 будет подключена следующим этапом."
+    )
+
+
 async def _show_recent_companies(message: Message, *, edit: bool = False) -> None:
     async with async_session_factory() as session:
         companies = await list_companies(session, limit=15)
@@ -184,6 +254,19 @@ async def _show_today_tasks(message: Message, *, edit: bool = False) -> None:
     text = "\n".join(lines)
     markup = today_tasks_markup(visible_tasks)
 
+    if edit:
+        await _safe_edit_message(message, text, reply_markup=markup)
+        return
+
+    await message.answer(text, reply_markup=markup)
+
+
+async def _show_stats(message: Message, *, edit: bool = False) -> None:
+    async with async_session_factory() as session:
+        stats = await get_crm_statistics(session)
+
+    text = _render_stats_text(stats)
+    markup = stats_markup()
     if edit:
         await _safe_edit_message(message, text, reply_markup=markup)
         return
@@ -839,6 +922,24 @@ async def company_ai_callback(callback: CallbackQuery) -> None:
     await callback.message.answer(result or "Компания не найдена.")
 
 
+@router.callback_query(F.data.startswith("company:handoff:"))
+async def company_handoff_callback(callback: CallbackQuery) -> None:
+    if not callback.message:
+        await callback.answer("Не удалось подготовить payload.", show_alert=True)
+        return
+
+    company_id = int(callback.data.rsplit(":", 1)[-1])
+    async with async_session_factory() as session:
+        payload = await build_consultation_handoff_payload(session, company_id)
+
+    if not payload:
+        await callback.answer("Компания не найдена.", show_alert=True)
+        return
+
+    await callback.answer("Черновик передачи подготовлен.")
+    await callback.message.answer(_render_handoff_preview(payload), parse_mode="HTML")
+
+
 @router.callback_query(F.data.startswith("task:open:"))
 async def task_open_callback(callback: CallbackQuery) -> None:
     if not callback.message:
@@ -881,8 +982,71 @@ async def task_shift_callback(callback: CallbackQuery) -> None:
 
 
 @router.message(F.text == "Статистика")
-async def stats_placeholder(message: Message) -> None:
-    await message.answer("Статистика будет добавлена на следующем этапе.")
+async def stats_screen(message: Message) -> None:
+    await _show_stats(message)
+
+
+@router.callback_query(F.data == "stats:menu")
+async def stats_menu_callback(callback: CallbackQuery) -> None:
+    if not callback.message:
+        await callback.answer("Не удалось открыть статистику.", show_alert=True)
+        return
+
+    await _show_stats(callback.message, edit=True)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "stats:companies:new")
+async def stats_new_companies_callback(callback: CallbackQuery) -> None:
+    if not callback.message:
+        await callback.answer("Не удалось открыть список.", show_alert=True)
+        return
+
+    async with async_session_factory() as session:
+        companies = await list_companies_by_status(session, "new", limit=15)
+
+    await _safe_edit_message(
+        callback.message,
+        _render_status_companies("Новые лиды", companies),
+        reply_markup=stats_company_list_markup(companies) if companies else stats_markup(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "stats:companies:interested")
+async def stats_interested_companies_callback(callback: CallbackQuery) -> None:
+    if not callback.message:
+        await callback.answer("Не удалось открыть список.", show_alert=True)
+        return
+
+    async with async_session_factory() as session:
+        companies = await list_companies_by_status(session, "interested", limit=15)
+
+    await _safe_edit_message(
+        callback.message,
+        _render_status_companies("Интересные компании", companies),
+        reply_markup=stats_company_list_markup(companies) if companies else stats_markup(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "stats:tasks:overdue")
+async def stats_overdue_tasks_callback(callback: CallbackQuery) -> None:
+    if not callback.message:
+        await callback.answer("Не удалось открыть задачи.", show_alert=True)
+        return
+
+    async with async_session_factory() as session:
+        dashboard = await get_task_dashboard(session)
+
+    overdue = dashboard["overdue"]
+    text = "\n".join(["Просроченные задачи", "", *_render_task_section("Просрочено", "🔴", overdue)])
+    await _safe_edit_message(
+        callback.message,
+        text,
+        reply_markup=stats_tasks_markup(overdue) if overdue else stats_markup(),
+    )
+    await callback.answer()
 
 
 @router.message(F.text == "Настройки")

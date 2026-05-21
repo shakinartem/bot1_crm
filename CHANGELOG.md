@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Added CSV import preview workflow in Telegram.
+- Added column mapping for Russian and English CSV headers.
+- Added deduplication rules for INN, OGRN, phone, website, and name+city.
+- Added import report with added, updated, skipped, and error counters.
+- Added CRM statistics screen.
+- Added draft consultation handoff payload for future Bot 2 integration.
 - Added richer Telegram CRM company cards with source, contacts, recent interaction, and next action context.
 - Added company inline actions for call logging, notes, decision makers, contacts, status updates, tasks, history, and AI preparation.
 - Added Telegram workflows for call outcomes, note capture, decision makers, contacts, status changes, company tasks, history view, and task completion.

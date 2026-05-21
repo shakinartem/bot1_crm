@@ -71,6 +71,7 @@ def company_actions(company_id: int) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="📜 История", callback_data=f"company:history:{company_id}:0"),
                 InlineKeyboardButton(text="🤖 AI-подготовка", callback_data=f"company:ai:{company_id}"),
             ],
+            [InlineKeyboardButton(text="🚀 Передать в консультацию", callback_data=f"company:handoff:{company_id}")],
             [InlineKeyboardButton(text="⬅️ Назад", callback_data="company:list")],
         ]
     )
@@ -86,6 +87,20 @@ def company_list_markup(companies: list[Any]) -> InlineKeyboardMarkup:
         ]
         for company in companies
     ]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def stats_company_list_markup(companies: list[Any]) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"#{company.id} {company.name[:28]}",
+                callback_data=f"company:open:{company.id}",
+            )
+        ]
+        for company in companies
+    ]
+    rows.append([InlineKeyboardButton(text="⬅️ К статистике", callback_data="stats:menu")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -155,3 +170,28 @@ def today_tasks_markup(tasks: list[Any]) -> InlineKeyboardMarkup | None:
             ]
         )
     return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
+
+
+def stats_tasks_markup(tasks: list[Any]) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    for task in tasks:
+        rows.append(
+            [
+                InlineKeyboardButton(text=f"Открыть #{task.company_id}", callback_data=f"task:open:{task.id}"),
+                InlineKeyboardButton(text="Выполнено", callback_data=f"task:done:{task.id}"),
+                InlineKeyboardButton(text="Перенести", callback_data=f"task:shift:{task.id}"),
+            ]
+        )
+    rows.append([InlineKeyboardButton(text="⬅️ К статистике", callback_data="stats:menu")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def stats_markup() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Новые лиды", callback_data="stats:companies:new")],
+            [InlineKeyboardButton(text="Просроченные задачи", callback_data="stats:tasks:overdue")],
+            [InlineKeyboardButton(text="Интересные", callback_data="stats:companies:interested")],
+            [InlineKeyboardButton(text="Назад", callback_data="stats:menu")],
+        ]
+    )

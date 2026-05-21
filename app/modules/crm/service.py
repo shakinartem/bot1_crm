@@ -2,7 +2,7 @@ import re
 from datetime import datetime, timedelta
 from html import escape
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -85,6 +85,23 @@ async def create_company(session: AsyncSession, payload: CompanyCreate) -> Compa
 async def list_companies(session: AsyncSession, limit: int = 20, offset: int = 0) -> list[Company]:
     result = await session.execute(
         select(Company)
+        .order_by(Company.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    return list(result.scalars().all())
+
+
+async def list_companies_by_status(
+    session: AsyncSession,
+    status: str,
+    *,
+    limit: int = 20,
+    offset: int = 0,
+) -> list[Company]:
+    result = await session.execute(
+        select(Company)
+        .where(Company.status == status)
         .order_by(Company.created_at.desc())
         .limit(limit)
         .offset(offset)
@@ -374,6 +391,45 @@ async def get_task_dashboard(
         "overdue": overdue,
         "today": today_tasks,
         "upcoming": upcoming,
+    }
+
+
+async def get_crm_statistics(
+    session: AsyncSession,
+    *,
+    now: datetime | None = None,
+) -> dict[str, int | dict[str, int]]:
+    now = now or datetime.now()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    seven_days_ago = now - timedelta(days=7)
+
+    total_companies = await session.scalar(select(func.count(Company.id)))
+    status_rows = await session.execute(
+        select(Company.status, func.count(Company.id))
+        .group_by(Company.status)
+    )
+    status_counts = {status: count for status, count in status_rows.all()}
+
+    open_tasks = await session.scalar(
+        select(func.count(FollowUpTask.id)).where(FollowUpTask.status == TaskStatus.OPEN.value)
+    )
+    dashboard = await get_task_dashboard(session, now=now)
+
+    interactions_today = await session.scalar(
+        select(func.count(LeadInteraction.id)).where(LeadInteraction.created_at >= today_start)
+    )
+    interactions_seven_days = await session.scalar(
+        select(func.count(LeadInteraction.id)).where(LeadInteraction.created_at >= seven_days_ago)
+    )
+
+    return {
+        "total_companies": total_companies or 0,
+        "status_counts": status_counts,
+        "open_tasks": open_tasks or 0,
+        "overdue_tasks": len(dashboard["overdue"]),
+        "today_tasks": len(dashboard["today"]),
+        "touches_today": interactions_today or 0,
+        "touches_last_7_days": interactions_seven_days or 0,
     }
 
 

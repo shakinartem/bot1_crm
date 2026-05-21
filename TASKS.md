@@ -2,11 +2,11 @@
 
 ## Current Sprint
 
-- [ ] CSV preview before import
-- [ ] CSV column mapping
-- [ ] statistics dashboard
-- [ ] export to consultation bot
-- [ ] contract generation draft
+- [ ] Real Bot 2 API integration
+- [ ] Contract generation draft
+- [ ] Export companies
+- [ ] Manager daily digest
+- [ ] Lead source analytics
 
 ## Backlog
 
@@ -15,10 +15,15 @@
 - Добавить сценарий добавления ЛПР из карточки.
 - Добавить сценарий добавления контакта из карточки.
 - Добавить список задач на сегодня.
-- Добавить предпросмотр CSV перед подтверждением импорта.
 
 ## Done
 
+- CSV import preview
+- CSV column mapping
+- CSV deduplication
+- CSV import report
+- CRM statistics screen
+- Consultation handoff payload draft
 - Создан MVP FastAPI + aiogram + SQLAlchemy + Alembic.
 - Добавлен AI abstraction layer для OpenRouter, Ollama и fallback.
 - Добавлен CSV импорт с дедупликацией.

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
@@ -16,7 +16,7 @@ from app.modules.crm.schemas import (
     InteractionCreate,
     InteractionRead,
 )
-from app.modules.imports.service import import_companies_from_csv
+from app.modules.imports.service import import_companies_from_csv, preview_companies_from_csv, save_import_file
 
 router = APIRouter()
 
@@ -161,10 +161,58 @@ async def update_task(
 @api_router.post("/imports/csv")
 async def import_csv(
     file: UploadFile,
+    mode: str = Query(default="preview", pattern="^(preview|commit)$"),
+    import_mode: str = Query(default="skip", pattern="^(skip|update)$"),
     session: AsyncSession = Depends(get_session),
 ):
     content = await file.read()
-    return await import_companies_from_csv(session, content.decode("utf-8-sig"))
+    saved_path = save_import_file(content, file.filename)
+    if mode == "commit":
+        return await import_companies_from_csv(
+            session,
+            content,
+            file_name=file.filename,
+            file_path=str(saved_path),
+            import_mode=import_mode,
+        )
+    return await preview_companies_from_csv(
+        session,
+        content,
+        file_name=file.filename,
+        file_path=str(saved_path),
+    )
+
+
+@api_router.post("/imports/csv/preview")
+async def import_csv_preview(
+    file: UploadFile,
+    session: AsyncSession = Depends(get_session),
+):
+    content = await file.read()
+    saved_path = save_import_file(content, file.filename)
+    return await preview_companies_from_csv(
+        session,
+        content,
+        file_name=file.filename,
+        file_path=str(saved_path),
+    )
+
+
+@api_router.post("/imports/csv/commit")
+async def import_csv_commit(
+    file: UploadFile,
+    import_mode: str = Query(default="skip", pattern="^(skip|update)$"),
+    session: AsyncSession = Depends(get_session),
+):
+    content = await file.read()
+    saved_path = save_import_file(content, file.filename)
+    return await import_companies_from_csv(
+        session,
+        content,
+        file_name=file.filename,
+        file_path=str(saved_path),
+        import_mode=import_mode,
+    )
 
 
 @api_router.post("/companies/{company_id}/ai/call-prep")
