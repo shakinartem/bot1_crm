@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added richer Telegram CRM company cards with source, contacts, recent interaction, and next action context.
+- Added company inline actions for call logging, notes, decision makers, contacts, status updates, tasks, history, and AI preparation.
+- Added Telegram workflows for call outcomes, note capture, decision makers, contacts, status changes, company tasks, history view, and task completion.
+- Improved Telegram search and today's tasks dashboard for faster manager workflows.
 - Fixed damaged newline formatting across Python, markdown, env, and requirements files.
 - Fixed broken Russian text strings in Telegram handlers.
 - Added smoke_check.py for basic import validation.

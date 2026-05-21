@@ -2,12 +2,11 @@
 
 ## Current Sprint
 
-- [x] Repair damaged newlines and formatting in source files
-- [x] Validate Python syntax with compileall
-- [x] Validate requirements.txt and .env.example formatting
-- [x] Validate Alembic migration syntax
-- [x] Add smoke check script
-- [ ] Continue Telegram CRM workflows after stable launch
+- [ ] CSV preview before import
+- [ ] CSV column mapping
+- [ ] statistics dashboard
+- [ ] export to consultation bot
+- [ ] contract generation draft
 
 ## Backlog
 
@@ -28,6 +27,18 @@
 - Этап 1: исправлена кодировка пользовательских сообщений в текущих Telegram handlers.
 - Stabilization: repaired source formatting, syntax risks, API payload handling, and Alembic batch settings.
 - Telegram CRM: added main menu flows, company card inline actions, tasks digest, and step-by-step company creation FSM.
+- improved company card
+- added company inline actions
+- added call result workflow
+- added note workflow
+- added decision maker workflow
+- added contact workflow
+- added status change workflow
+- added task workflow
+- added company history view
+- improved today tasks view
+- improved search
+- connected AI call prep from company card
 
 ## Bugs
 
