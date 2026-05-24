@@ -233,6 +233,7 @@ Automatic morning digest is available with a lightweight in-process scheduler in
 - enable or disable auto-digest
 - change send time
 - change stale lead period
+- persist settings per Telegram user in the `digest_settings` table
 
 API endpoints:
 
@@ -255,6 +256,12 @@ Bot 2 handoff smoke check:
 
 ```bash
 python scripts/smoke_bot2_handoff.py
+```
+
+Digest module smoke test:
+
+```bash
+python scripts/test_digest_module.py
 ```
 
 It verifies:

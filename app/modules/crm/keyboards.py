@@ -28,7 +28,7 @@ def main_menu() -> ReplyKeyboardMarkup:
         [KeyboardButton(text="Поиск"), KeyboardButton(text="Импорт CSV")],
         [KeyboardButton(text="Задачи на сегодня"), KeyboardButton(text="AI-подготовка к звонку")],
         [KeyboardButton(text="Статистика"), KeyboardButton(text="📤 Экспорт")],
-        [KeyboardButton(text="Настройки")],
+        [KeyboardButton(text="🗓 План дня"), KeyboardButton(text="Настройки")],
     ]
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
 

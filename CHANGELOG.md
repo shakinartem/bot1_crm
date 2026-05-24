@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Added manager daily digest with overdue tasks, today tasks, hot leads, and stale leads.
+- Added weekly sales summary.
+- Added digest commands for Telegram.
+- Added digest API endpoints for future web UI.
+- Added rule-based/AI daily recommendation.
+- Added task completion from digest screens.
+- Added digest settings and scheduler.
 - Added company export workflow in Telegram.
 - Added CSV export with CRM filters.
 - Added consultation package preview for company cards.

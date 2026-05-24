@@ -8,6 +8,8 @@ from app.database import create_db_schema
 from app.modules.ai.handlers import router as ai_router
 from app.modules.calls.handlers import router as calls_router
 from app.modules.crm.handlers import router as crm_router
+from app.modules.digest.handlers import router as digest_router
+from app.modules.digest.scheduler import DigestScheduler
 from app.modules.exports.handlers import router as exports_router
 from app.modules.imports.handlers import router as imports_router
 
@@ -26,11 +28,21 @@ async def main() -> None:
     bot = Bot(token=settings.bot_token)
     dp = Dispatcher()
     dp.include_router(crm_router)
+    dp.include_router(digest_router)
     dp.include_router(exports_router)
     dp.include_router(imports_router)
     dp.include_router(ai_router)
     dp.include_router(calls_router)
-    await dp.start_polling(bot)
+
+    scheduler = DigestScheduler()
+    scheduler_task = asyncio.create_task(scheduler.run(bot))
+    try:
+        await dp.start_polling(bot)
+    finally:
+        scheduler.stop()
+        scheduler_task.cancel()
+        await asyncio.gather(scheduler_task, return_exceptions=True)
+        await bot.session.close()
 
 
 if __name__ == "__main__":

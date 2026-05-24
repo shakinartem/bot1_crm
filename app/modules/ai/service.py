@@ -1,7 +1,12 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.modules.ai.prompts import build_cold_call_prompt, build_fallback_mini_audit, build_mini_audit_prompt
+from app.modules.ai.prompts import (
+    build_cold_call_prompt,
+    build_daily_digest_recommendation_prompt,
+    build_fallback_mini_audit,
+    build_mini_audit_prompt,
+)
 from app.modules.ai.providers import get_ai_provider
 from app.modules.crm.service import get_company, get_company_last_interactions, humanize_company_status
 
@@ -43,3 +48,14 @@ async def generate_mini_audit(session: AsyncSession, company_id: int) -> str | N
         return await get_ai_provider().generate(prompt)
     except Exception:
         return build_fallback_mini_audit(company_context)
+
+
+async def generate_daily_recommendation(summary: dict) -> str | None:
+    if get_settings().ai_provider.lower() == "fallback":
+        return None
+
+    prompt = build_daily_digest_recommendation_prompt(summary)
+    try:
+        return await get_ai_provider().generate(prompt)
+    except Exception:
+        return None

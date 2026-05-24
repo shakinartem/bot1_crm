@@ -162,3 +162,28 @@ def build_fallback_mini_audit(company_context: dict) -> str:
         "## 6. Следующий шаг\n"
         "Назначить консультацию и собрать дополнительные данные: доступы к сайту, рекламе, аналитике и текущим скриптам обработки обращений."
     )
+
+
+def build_daily_digest_recommendation_prompt(summary: dict) -> str:
+    return f"""
+TASK: DAILY_DIGEST_RECOMMENDATION
+
+Ты sales lead assistant агентства ШАРиК digital.
+На основе краткого дайджеста дня предложи 3 главных действия менеджеру по стоматологическим клиникам.
+
+Не выдумывай данные, не обещай результаты, пиши коротко и по делу.
+Фокус: продажи, follow-up, заинтересованные лиды, КП, консультации, возврат лидов без касаний.
+
+Сводка:
+- Просроченные задачи: {summary.get('overdue_tasks', 0)}
+- Задачи на сегодня: {summary.get('today_tasks', 0)}
+- Горячие лиды: {summary.get('hot_leads', 0)}
+- Давно без касаний: {summary.get('stale_leads', 0)}
+- Вчера касаний: {summary.get('yesterday_interactions', 0)}
+- Вчера интерес: {summary.get('yesterday_interested', 0)}
+- Вчера консультаций: {summary.get('yesterday_consultations', 0)}
+- Вчера КП: {summary.get('yesterday_proposals', 0)}
+- Вчера отказов: {summary.get('yesterday_rejections', 0)}
+
+Верни ответ максимум в 3 коротких пунктах на русском языке.
+""".strip()
