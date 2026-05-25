@@ -12,7 +12,7 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     settings.storage_path.mkdir(parents=True, exist_ok=True)
 
-    for child in ("calls", "imports", "companies", "exports"):
+    for child in ("calls", "imports", "companies", "exports", "proposals"):
         (settings.storage_path / child).mkdir(parents=True, exist_ok=True)
 
     await create_db_schema()

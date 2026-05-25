@@ -390,11 +390,20 @@ async def apply_bot2_consultation_result(
     company.status = BOT2_RESULT_TO_COMPANY_STATUS[payload.result]
     session.add(company)
 
+    summary = payload.summary
+    if payload.result == "contract_sent":
+        summary = (
+            f"{payload.summary}\n\n"
+            "Рекомендация: Сформировать КП/договор в разделе КП / Договор."
+        )
+    elif payload.result == "signed":
+        summary = "Клиент подписал договор"
+
     interaction = LeadInteraction(
         company_id=company_id,
         type=InteractionType.CONSULTATION.value,
         result=BOT2_RESULT_TO_INTERACTION_RESULT[payload.result],
-        summary=payload.summary,
+        summary=summary,
         created_by=payload.source or "bot2",
     )
     session.add(interaction)
@@ -417,8 +426,8 @@ async def apply_bot2_consultation_result(
         session.add(
             FollowUpTask(
                 company_id=company_id,
-                title="Проверить статус договора",
-                description=payload.summary,
+                title="Подготовить/проверить КП и договор",
+                description=summary,
                 due_at=due_at,
                 due_date=due_at,
                 status=TaskStatus.OPEN.value,

@@ -12,6 +12,7 @@ from app.modules.digest.handlers import router as digest_router
 from app.modules.digest.scheduler import DigestScheduler
 from app.modules.exports.handlers import router as exports_router
 from app.modules.imports.handlers import router as imports_router
+from app.modules.proposals.handlers import router as proposals_router
 
 
 async def main() -> None:
@@ -21,13 +22,14 @@ async def main() -> None:
         raise RuntimeError("BOT_TOKEN is required to start Telegram bot")
 
     settings.storage_path.mkdir(parents=True, exist_ok=True)
-    for child in ("calls", "imports", "companies", "exports"):
+    for child in ("calls", "imports", "companies", "exports", "proposals"):
         (settings.storage_path / child).mkdir(parents=True, exist_ok=True)
     await create_db_schema()
 
     bot = Bot(token=settings.bot_token)
     dp = Dispatcher()
     dp.include_router(crm_router)
+    dp.include_router(proposals_router)
     dp.include_router(digest_router)
     dp.include_router(exports_router)
     dp.include_router(imports_router)

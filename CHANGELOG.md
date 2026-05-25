@@ -9,6 +9,16 @@
 - Added rule-based/AI daily recommendation.
 - Added task completion from digest screens.
 - Added digest settings and scheduler.
+- Added SHARiK digital service package catalog.
+- Added package suggestion workflow for company cards.
+- Added manual package selection.
+- Added commercial proposal draft generation.
+- Added contract draft structure generation.
+- Added service appendix generation.
+- Added proposal and contract markdown exports.
+- Added proposal history.
+- Added proposal/contract API endpoints.
+- Added smoke_proposals.py.
 - Added company export workflow in Telegram.
 - Added CSV export with CRM filters.
 - Added consultation package preview for company cards.

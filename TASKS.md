@@ -2,11 +2,11 @@
 
 ## Current Sprint
 
-- [ ] Real Bot 2 API integration
-- [ ] Contract generation draft
 - [ ] Lead source analytics
 - [ ] Website/social research enrichment
 - [ ] Manager roles and multi-user CRM
+- [ ] Real document templates with реквизиты
+- [ ] Real Bot 2 push integration, if still not connected
 
 ## Backlog
 
@@ -45,6 +45,16 @@
 - AI/rule-based daily recommendation
 - Automatic morning digest
 - Digest settings
+- Service package catalog
+- Package suggestion workflow
+- Manual package selection
+- Commercial proposal draft generation
+- Contract draft generation
+- Service appendix generation
+- Proposal/contract file export
+- Proposal history
+- Proposal API endpoints
+- Proposal smoke check
 - Bot 2 handoff API via `/api/bot2/*`
 - Bot 2 consultation result -> CRM status / interaction / follow-up task mapping
 - `GET /api/companies` filters by status/city/priority

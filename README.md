@@ -244,6 +244,41 @@ API endpoints:
 - `GET /api/digest/hot-leads`
 - `GET /api/digest/stale-leads`
 
+## Proposals and Contract Drafts
+
+Use the company card button `📄 КП / Договор` to open the proposal workspace.
+
+What is available:
+
+- service package suggestion based on company card, notes, interactions, and current status
+- manual package selection with Telegram inline checkboxes
+- commercial proposal draft generation
+- contract draft structure generation
+- service appendix generation
+- proposal and contract file history with re-send from Telegram
+- markdown export in `storage/proposals/`
+
+Legal note:
+
+- contract drafts are not final legal documents
+- every contract draft must be reviewed by a lawyer and completed manually with requisites and exact terms
+
+API endpoints:
+
+- `GET /api/proposals/packages`
+- `POST /api/companies/{id}/proposals/suggest-packages`
+- `POST /api/companies/{id}/proposals/generate`
+- `POST /api/companies/{id}/contracts/draft`
+- `POST /api/companies/{id}/contracts/service-appendix`
+- `GET /api/companies/{id}/proposals/history`
+- `GET /api/companies/{id}/proposals/{proposal_id}/file`
+
+Smoke check:
+
+```bash
+python scripts/smoke_proposals.py
+```
+
 ## Smoke Checks
 
 Basic repo smoke check:

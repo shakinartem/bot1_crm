@@ -59,6 +59,10 @@ class Company(Base):
         back_populates="company",
         cascade="all, delete-orphan",
     )
+    proposal_drafts: Mapped[list["ProposalDraft"]] = relationship(
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
 
 
 class DecisionMaker(Base):
@@ -149,3 +153,4 @@ Task = FollowUpTask
 
 
 from app.modules.calls.models import CallRecord  # noqa: E402,F401
+from app.modules.proposals.models import ProposalDraft  # noqa: E402,F401

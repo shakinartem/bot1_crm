@@ -74,8 +74,9 @@ def company_actions(company_id: int) -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(text="📦 Пакет консультации", callback_data=f"consult:package:{company_id}"),
-                InlineKeyboardButton(text="📤 Экспортировать компанию", callback_data=f"consult:export_company:{company_id}"),
+                InlineKeyboardButton(text="📄 КП / Договор", callback_data=f"proposal:open:{company_id}"),
             ],
+            [InlineKeyboardButton(text="📤 Экспортировать компанию", callback_data=f"consult:export_company:{company_id}")],
             [InlineKeyboardButton(text="🚀 Подготовить передачу в БОТ 2", callback_data=f"consult:handoff:{company_id}")],
             [InlineKeyboardButton(text="⬅️ Назад", callback_data="company:list")],
         ]

@@ -30,6 +30,26 @@ from app.modules.digest.service import (
 )
 from app.modules.exports.service import ExportFilters, export_companies_to_csv
 from app.modules.imports.service import import_companies_from_csv, preview_companies_from_csv, save_import_file
+from app.modules.proposals.keyboards import package_catalog_payload
+from app.modules.proposals.schemas import (
+    ContractActionRequest,
+    ContractDraftResultRead,
+    PackageRead,
+    PackageSuggestion,
+    ProposalActionRequest,
+    ProposalDraftRead,
+    ProposalGenerationResultRead,
+    ServiceAppendixResultRead,
+)
+from app.modules.proposals.service import (
+    generate_commercial_proposal,
+    generate_contract_draft,
+    generate_service_appendix,
+    get_proposal_draft,
+    list_company_proposal_drafts,
+    parse_selected_packages,
+    suggest_packages_for_company,
+)
 
 router = APIRouter()
 
@@ -157,6 +177,118 @@ async def digest_stale_leads(
     limit: int = 20,
 ):
     return await get_stale_leads(session, days_without_interaction=days_without_interaction, limit=limit)
+
+
+@api_router.get("/proposals/packages", response_model=list[PackageRead])
+async def proposals_packages():
+    return package_catalog_payload()
+
+
+@api_router.post("/companies/{company_id}/proposals/suggest-packages", response_model=list[PackageSuggestion])
+async def proposals_suggest_packages(
+    company_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    return await suggest_packages_for_company(session, company_id)
+
+
+@api_router.post("/companies/{company_id}/proposals/generate", response_model=ProposalGenerationResultRead)
+async def proposals_generate(
+    company_id: int,
+    payload: ProposalActionRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    result = await generate_commercial_proposal(
+        session,
+        company_id,
+        selected_package_codes=payload.selected_package_codes,
+        use_ai=payload.use_ai,
+    )
+    return ProposalGenerationResultRead(
+        title=result.title,
+        content=result.content,
+        file_path=str(result.file_path),
+        selected_packages=result.selected_packages,
+        used_ai=result.used_ai,
+    )
+
+
+@api_router.post("/companies/{company_id}/contracts/draft", response_model=ContractDraftResultRead)
+async def contracts_draft(
+    company_id: int,
+    payload: ContractActionRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    result = await generate_contract_draft(
+        session,
+        company_id,
+        selected_package_codes=payload.selected_package_codes,
+    )
+    return ContractDraftResultRead(
+        title=result.title,
+        content=result.content,
+        file_path=str(result.file_path),
+        selected_packages=result.selected_packages,
+    )
+
+
+@api_router.post("/companies/{company_id}/contracts/service-appendix", response_model=ServiceAppendixResultRead)
+async def contracts_service_appendix(
+    company_id: int,
+    payload: ContractActionRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    result = await generate_service_appendix(
+        session,
+        company_id,
+        selected_package_codes=payload.selected_package_codes,
+    )
+    return ServiceAppendixResultRead(
+        title=result.title,
+        content=result.content,
+        file_path=str(result.file_path),
+        selected_packages=result.selected_packages,
+    )
+
+
+@api_router.get("/companies/{company_id}/proposals/history", response_model=list[ProposalDraftRead])
+async def proposals_history(
+    company_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    drafts = await list_company_proposal_drafts(session, company_id)
+    return [
+        ProposalDraftRead(
+            id=draft.id,
+            company_id=draft.company_id,
+            draft_type=draft.draft_type,
+            title=draft.title,
+            content=draft.content,
+            file_path=draft.file_path,
+            selected_packages=parse_selected_packages(draft.selected_packages),
+            used_ai=draft.used_ai,
+            created_by=draft.created_by,
+            created_at=draft.created_at,
+            updated_at=draft.updated_at,
+        )
+        for draft in drafts
+    ]
+
+
+@api_router.get("/companies/{company_id}/proposals/{proposal_id}/file")
+async def proposals_file(
+    company_id: int,
+    proposal_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    draft = await get_proposal_draft(session, company_id, proposal_id)
+    if not draft:
+        raise HTTPException(status_code=404, detail="Proposal draft not found")
+    return FileResponse(
+        draft.file_path,
+        media_type="text/markdown",
+        filename=draft.file_path.replace("\\", "/").split("/")[-1],
+    )
 
 
 @api_router.get("/companies/{company_id}", response_model=CompanyRead)

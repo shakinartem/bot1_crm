@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT))
 
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./app_bot2_handoff_smoke.db")
 os.environ.setdefault("BOT_TOKEN", "")
+os.environ.setdefault("BOT2_API_TOKEN", "")
 os.environ.setdefault("STORAGE_PATH", "./storage")
 
 from fastapi.testclient import TestClient  # noqa: E402
