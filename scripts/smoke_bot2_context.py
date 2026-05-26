@@ -145,7 +145,16 @@ async def main() -> None:
             assert payload["open_tasks"], "open tasks must be returned"
             assert payload["latest_proposal"] is not None, "latest proposal must be present"
             assert payload["latest_call_result"] is not None, "latest call result must be present"
+            assert payload["latest_proposal"]["type"] == "proposal", "latest proposal must point to the latest proposal interaction"
+            assert payload["latest_call_result"]["type"] == "call", "latest call result must point to the latest call interaction"
             assert payload["recommended_next_step"] == "Подготовить консультацию", "open task title must win as next step"
+            assert "Компания: Стоматология Context Smoke." in payload["sales_summary"], "sales summary must include company name"
+            assert "Город: Саратов." in payload["sales_summary"], "sales summary must include city"
+            assert "Статус:" in payload["sales_summary"], "sales summary must include status"
+            assert "Приоритет:" in payload["sales_summary"], "sales summary must include priority"
+            assert "Источник: cold_call." in payload["sales_summary"], "sales summary must include source"
+            assert "Следующий шаг: Подготовить консультацию." in payload["sales_summary"], "sales summary must include recommended next step"
+            assert "Заметки: Нужно понять, где теряют заявки." in payload["sales_summary"], "sales summary must include notes"
 
         with temporary_env(BOT2_API_TOKEN="bot2-token"):
             unauthorized = client.get(f"/api/bot2/companies/{company_id}/consultation-context")

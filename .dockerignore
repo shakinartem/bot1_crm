@@ -4,3 +4,5 @@ __pycache__
 storage/*
 *.db
 .git
+.pytest_cache
+.mypy_cache

@@ -694,7 +694,7 @@ async def build_bot2_consultation_context(
     session: AsyncSession,
     company_id: int,
 ) -> Bot2ConsultationContextRead | None:
-    company = await get_company_full_context(session, company_id)
+    company = await get_company(session, company_id)
     if not company:
         return None
 
@@ -717,8 +717,8 @@ async def build_bot2_consultation_context(
         key=lambda item: (item.due_at is None, item.due_at or datetime.max, item.created_at or datetime.min),
     )
 
-    latest_proposal = next((item for item in recent_interactions if item.type == InteractionType.PROPOSAL.value), None)
-    latest_call_result = next((item for item in recent_interactions if item.type == InteractionType.CALL.value), None)
+    latest_proposal = next((item for item in interactions if item.type == InteractionType.PROPOSAL.value), None)
+    latest_call_result = next((item for item in interactions if item.type == InteractionType.CALL.value), None)
     latest_interaction_with_action = next((item for item in interactions if item.next_action), None)
 
     recommended_next_step = "Провести консультацию и уточнить узкое место digital-воронки."
@@ -731,14 +731,23 @@ async def build_bot2_consultation_context(
     if latest_call_result:
         last_call_summary = latest_call_result.summary or humanize_interaction_result(latest_call_result.result or "") or "нет данных"
 
+    company_name = company.name
+    city_text = company.city or "не указан"
+    status_text = humanize_company_status(company.status)
+    priority_text = humanize_priority(company.priority)
+    source_text = company.source or "не указан"
     open_task_titles = ", ".join(task.title for task in open_tasks[:3]) if open_tasks else "открытых задач нет"
     notes_text = company.notes or "без заметок"
     sales_summary = (
-        f"Источник: {company.source or 'не указан'}. "
-        f"Текущий статус: {humanize_company_status(company.status)}. "
-        f"Последний звонок: {last_call_summary}. "
-        f"Что важно учесть: {notes_text}. "
-        f"Текущие задачи: {open_task_titles}."
+        f"Компания: {company_name}. "
+        f"Город: {city_text}. "
+        f"Статус: {status_text}. "
+        f"Приоритет: {priority_text}. "
+        f"Источник: {source_text}. "
+        f"Последняя коммуникация: {last_call_summary}. "
+        f"Следующий шаг: {recommended_next_step}. "
+        f"Заметки: {notes_text}. "
+        f"Открытые задачи: {open_task_titles}."
     )
 
     return Bot2ConsultationContextRead(
