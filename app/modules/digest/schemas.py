@@ -19,12 +19,15 @@ class LeadDigestItem(BaseModel):
     city: str | None = None
     status: str
     priority: str
+    score: int | None = None
+    grade: str | None = None
     last_interaction_at: str | None = None
     last_interaction_result: str | None = None
     next_task_due_at: str | None = None
     next_task_title: str | None = None
     reason: str
     days_without_interaction: int | None = None
+    proposal_recommendation: str | None = None
 
 
 class ActivitySummary(BaseModel):
@@ -47,6 +50,7 @@ class DailyDigestRead(BaseModel):
     overdue_tasks: list[TaskDigestItem]
     today_tasks: list[TaskDigestItem]
     hot_leads: list[LeadDigestItem]
+    top_scored_leads: list[LeadDigestItem]
     stale_leads: list[LeadDigestItem]
     yesterday_activity: ActivitySummary
     recommendation: str

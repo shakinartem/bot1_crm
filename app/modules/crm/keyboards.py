@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Any
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
@@ -27,8 +29,9 @@ def main_menu() -> ReplyKeyboardMarkup:
         [KeyboardButton(text="Компании"), KeyboardButton(text="Добавить компанию")],
         [KeyboardButton(text="Поиск"), KeyboardButton(text="Импорт CSV")],
         [KeyboardButton(text="Задачи на сегодня"), KeyboardButton(text="AI-подготовка к звонку")],
-        [KeyboardButton(text="Статистика"), KeyboardButton(text="📤 Экспорт")],
-        [KeyboardButton(text="🗓 План дня"), KeyboardButton(text="Настройки")],
+        [KeyboardButton(text="Статистика"), KeyboardButton(text="📈 Аналитика")],
+        [KeyboardButton(text="📤 Экспорт"), KeyboardButton(text="🗓 План дня")],
+        [KeyboardButton(text="Настройки")],
     ]
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
 

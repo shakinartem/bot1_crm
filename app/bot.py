@@ -5,6 +5,7 @@ from aiogram import Bot, Dispatcher
 
 from app.config import get_settings
 from app.database import create_db_schema
+from app.modules.analytics.handlers import router as analytics_router
 from app.modules.ai.handlers import router as ai_router
 from app.modules.calls.handlers import router as calls_router
 from app.modules.crm.handlers import router as crm_router
@@ -29,6 +30,7 @@ async def main() -> None:
     bot = Bot(token=settings.bot_token)
     dp = Dispatcher()
     dp.include_router(crm_router)
+    dp.include_router(analytics_router)
     dp.include_router(proposals_router)
     dp.include_router(digest_router)
     dp.include_router(exports_router)

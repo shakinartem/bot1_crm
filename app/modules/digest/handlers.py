@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.database import async_session_factory
+from app.modules.analytics.service import format_company_card_with_score
 from app.modules.crm.keyboards import CANCEL_TEXT, company_actions, flow_menu, main_menu
 from app.modules.crm.service import (
     complete_task,
@@ -320,7 +321,7 @@ async def digest_open_company_callback(callback: CallbackQuery) -> None:
         return
 
     await callback.message.answer(
-        format_company_card(company),
+        format_company_card_with_score(company),
         parse_mode="HTML",
         reply_markup=company_actions(company.id),
     )
@@ -548,6 +549,93 @@ def _render_digest_settings_text(settings: DigestSettings) -> str:
             f"Давно без касаний: {settings.stale_days} дней",
         ]
     )
+
+
+def _render_daily_digest_text(digest) -> str:
+    lines = [
+        f"🗓 План дня — {digest.date}",
+        "",
+        f"🔴 Просроченные задачи: {len(digest.overdue_tasks)}",
+    ]
+    lines.extend(_preview_tasks(digest.overdue_tasks))
+    lines.extend(["", f"🟡 Задачи на сегодня: {len(digest.today_tasks)}"])
+    lines.extend(_preview_tasks(digest.today_tasks))
+    lines.extend(["", f"🔥 Горячие лиды: {len(digest.hot_leads)}"])
+    lines.extend(_preview_leads(digest.hot_leads))
+    lines.extend(["", "🔥 Топ лидов по скорингу:"])
+    lines.extend(_preview_scored_leads(digest.top_scored_leads))
+    lines.extend(["", f"🧊 Давно без касаний: {len(digest.stale_leads)}"])
+    lines.extend(_preview_stale(digest.stale_leads))
+    lines.extend(
+        [
+            "",
+            "📊 Вчера:",
+            f"• Касаний: {digest.yesterday_activity.interactions_total}",
+            f"• Интерес: {digest.yesterday_activity.interested_count}",
+            f"• КП: {digest.yesterday_activity.proposals_count}",
+            f"• Консультации: {digest.yesterday_activity.consultations_count}",
+            f"• Отказы: {digest.yesterday_activity.deals_lost_count}",
+            "",
+            "🎯 Рекомендация:",
+            digest.recommendation,
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _render_lead_digest_text(title: str, leads: list) -> str:
+    lines = [title, ""]
+    if not leads:
+        lines.append("Список пуст.")
+        return "\n".join(lines)
+
+    for index, lead in enumerate(leads, start=1):
+        score_suffix = f" — {lead.score}/100 — {lead.grade}" if lead.score is not None and lead.grade else ""
+        lines.append(f"{index}. {lead.company_name} — {humanize_company_status(lead.status)}{score_suffix} — {lead.reason}")
+        if lead.city:
+            lines.append(f"Город: {lead.city}")
+        if lead.last_interaction_at:
+            lines.append(f"Последнее касание: {lead.last_interaction_at}")
+        if lead.next_task_title:
+            due_suffix = f" ({lead.next_task_due_at})" if lead.next_task_due_at else ""
+            lines.append(f"Последняя задача: {lead.next_task_title}{due_suffix}")
+        if lead.proposal_recommendation:
+            lines.append(lead.proposal_recommendation)
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
+def _preview_tasks(tasks: list) -> list[str]:
+    if not tasks:
+        return ["— нет"]
+    return [f"{index}. {task.company_name} — {task.title}" for index, task in enumerate(tasks[:3], start=1)]
+
+
+def _preview_leads(leads: list) -> list[str]:
+    if not leads:
+        return ["— нет"]
+    return [
+        f"{index}. {lead.company_name} — {lead.score or 0}/100 — последнее касание {lead.last_interaction_at or 'нет'}"
+        for index, lead in enumerate(leads[:3], start=1)
+    ]
+
+
+def _preview_scored_leads(leads: list) -> list[str]:
+    if not leads:
+        return ["— нет"]
+    return [
+        f"{index}. {lead.company_name} — {lead.score or 0}/100 — {lead.reason}"
+        for index, lead in enumerate(leads[:3], start=1)
+    ]
+
+
+def _preview_stale(leads: list) -> list[str]:
+    if not leads:
+        return ["— нет"]
+    return [
+        f"{index}. {lead.company_name} — {lead.days_without_interaction or 0} дней без касаний"
+        for index, lead in enumerate(leads[:3], start=1)
+    ]
 
 
 async def _resolve_digest_settings(session: AsyncSession, user_id: int) -> DigestSettings:

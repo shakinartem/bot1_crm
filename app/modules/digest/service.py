@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import get_settings
+from app.modules.analytics.service import build_company_lead_score
 from app.modules.ai.service import generate_daily_recommendation
 from app.modules.crm.constants import CompanyStatus, InteractionResult, InteractionType, LeadPriority, TaskStatus
 from app.modules.crm.models import Company, FollowUpTask, LeadInteraction
@@ -88,6 +89,7 @@ async def get_hot_leads(
     scored: list[tuple[tuple, LeadDigestItem]] = []
 
     for company in companies:
+        lead_score = build_company_lead_score(company)
         last_interaction = _last_interaction(company)
         next_task = _next_open_task(company)
         overdue_task = _has_overdue_task(company)
@@ -123,6 +125,7 @@ async def get_hot_leads(
                 (
                     0 if overdue_task else 1,
                     0 if high_priority else 1,
+                    -lead_score.score,
                     -status_weight,
                     -freshness,
                     0 if last_interaction else 1,
@@ -132,6 +135,9 @@ async def get_hot_leads(
                     reason=", ".join(reasons),
                     next_task=next_task,
                     last_interaction=last_interaction,
+                    score=lead_score.score,
+                    grade=lead_score.grade,
+                    proposal_recommendation=lead_score.proposal_recommendation,
                 ),
             )
         )
@@ -191,6 +197,7 @@ async def build_daily_digest(session: AsyncSession, manager_id: int | None = Non
     overdue = await get_overdue_tasks(session)
     today = await get_today_tasks(session)
     hot = await get_hot_leads(session)
+    top_scored = await get_top_scored_leads(session, limit=3)
 
     stale_days = DEFAULT_STALE_DAYS
     if manager_id is not None:
@@ -223,6 +230,7 @@ async def build_daily_digest(session: AsyncSession, manager_id: int | None = Non
         overdue_tasks=overdue,
         today_tasks=today,
         hot_leads=hot,
+        top_scored_leads=top_scored,
         stale_leads=stale,
         yesterday_activity=yesterday,
         recommendation=recommendation,
@@ -240,6 +248,34 @@ async def build_weekly_summary(session: AsyncSession, manager_id: int | None = N
         activity=activity,
         recommendation=recommendation,
     )
+
+
+async def get_top_scored_leads(
+    session: AsyncSession,
+    limit: int = 3,
+) -> list[LeadDigestItem]:
+    companies = await _load_digest_companies(session)
+    items: list[tuple[int, LeadDigestItem]] = []
+    for company in companies:
+        score = build_company_lead_score(company)
+        if score.score <= 0:
+            continue
+        items.append(
+            (
+                score.score,
+                _lead_digest_item(
+                    company,
+                    reason=score.next_best_action,
+                    next_task=_next_open_task(company),
+                    last_interaction=_last_interaction(company),
+                    score=score.score,
+                    grade=score.grade,
+                    proposal_recommendation=score.proposal_recommendation,
+                ),
+            )
+        )
+    items.sort(key=lambda item: (-item[0], item[1].company_name.lower()))
+    return [item for _, item in items[:limit]]
 
 
 async def recommend_daily_focus(digest: dict) -> str:
@@ -324,6 +360,8 @@ async def _load_digest_companies(session: AsyncSession) -> list[Company]:
     result = await session.execute(
         select(Company)
         .options(
+            selectinload(Company.decision_makers),
+            selectinload(Company.contacts),
             selectinload(Company.interactions),
             selectinload(Company.tasks),
         )
@@ -351,6 +389,9 @@ def _lead_digest_item(
     next_task: FollowUpTask | None,
     last_interaction: LeadInteraction | None,
     days_without_interaction: int | None = None,
+    score: int | None = None,
+    grade: str | None = None,
+    proposal_recommendation: str | None = None,
 ) -> LeadDigestItem:
     return LeadDigestItem(
         company_id=company.id,
@@ -358,6 +399,8 @@ def _lead_digest_item(
         city=company.city,
         status=company.status,
         priority=company.priority,
+        score=score,
+        grade=grade,
         last_interaction_at=format_datetime(last_interaction.created_at) if last_interaction else None,
         last_interaction_result=(
             humanize_interaction_result(last_interaction.result) if last_interaction and last_interaction.result else None
@@ -366,6 +409,7 @@ def _lead_digest_item(
         next_task_title=next_task.title if next_task else None,
         reason=reason,
         days_without_interaction=days_without_interaction,
+        proposal_recommendation=proposal_recommendation,
     )
 
 

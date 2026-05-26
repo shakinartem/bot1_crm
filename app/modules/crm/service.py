@@ -23,7 +23,13 @@ from app.modules.crm.constants import (
 )
 from app.modules.crm.models import Company, ContactPoint, DecisionMaker, FollowUpTask, LeadInteraction
 from app.modules.crm.schemas import (
+    Bot2CompanyContext,
+    Bot2ConsultationContextRead,
     Bot2ConsultationResultCreate,
+    Bot2ContactContext,
+    Bot2DecisionMakerContext,
+    Bot2InteractionContext,
+    Bot2TaskContext,
     CompanyCreate,
     CompanyUpdate,
     ContactPointCreate,
@@ -682,6 +688,70 @@ async def get_latest_proposal_draft(session: AsyncSession, company_id: int) -> L
         .limit(1)
     )
     return result.scalar_one_or_none()
+
+
+async def build_bot2_consultation_context(
+    session: AsyncSession,
+    company_id: int,
+) -> Bot2ConsultationContextRead | None:
+    company = await get_company_full_context(session, company_id)
+    if not company:
+        return None
+
+    decision_makers = sorted(
+        company.decision_makers,
+        key=lambda item: (not item.is_primary, item.created_at or datetime.min),
+    )
+    contacts = sorted(
+        company.contacts,
+        key=lambda item: (not item.is_primary, item.created_at or datetime.min),
+    )
+    interactions = sorted(
+        company.interactions,
+        key=lambda item: item.created_at or datetime.min,
+        reverse=True,
+    )
+    recent_interactions = interactions[:15]
+    open_tasks = sorted(
+        [task for task in company.tasks if task.status == TaskStatus.OPEN.value],
+        key=lambda item: (item.due_at is None, item.due_at or datetime.max, item.created_at or datetime.min),
+    )
+
+    latest_proposal = next((item for item in recent_interactions if item.type == InteractionType.PROPOSAL.value), None)
+    latest_call_result = next((item for item in recent_interactions if item.type == InteractionType.CALL.value), None)
+    latest_interaction_with_action = next((item for item in interactions if item.next_action), None)
+
+    recommended_next_step = "Провести консультацию и уточнить узкое место digital-воронки."
+    if open_tasks:
+        recommended_next_step = open_tasks[0].title
+    elif latest_interaction_with_action and latest_interaction_with_action.next_action:
+        recommended_next_step = latest_interaction_with_action.next_action
+
+    last_call_summary = "нет данных"
+    if latest_call_result:
+        last_call_summary = latest_call_result.summary or humanize_interaction_result(latest_call_result.result or "") or "нет данных"
+
+    open_task_titles = ", ".join(task.title for task in open_tasks[:3]) if open_tasks else "открытых задач нет"
+    notes_text = company.notes or "без заметок"
+    sales_summary = (
+        f"Источник: {company.source or 'не указан'}. "
+        f"Текущий статус: {humanize_company_status(company.status)}. "
+        f"Последний звонок: {last_call_summary}. "
+        f"Что важно учесть: {notes_text}. "
+        f"Текущие задачи: {open_task_titles}."
+    )
+
+    return Bot2ConsultationContextRead(
+        company=Bot2CompanyContext.model_validate(company),
+        decision_makers=[Bot2DecisionMakerContext.model_validate(item) for item in decision_makers],
+        contacts=[Bot2ContactContext.model_validate(item) for item in contacts],
+        recent_interactions=[Bot2InteractionContext.model_validate(item) for item in recent_interactions],
+        open_tasks=[Bot2TaskContext.model_validate(item) for item in open_tasks],
+        latest_proposal=Bot2InteractionContext.model_validate(latest_proposal) if latest_proposal else None,
+        latest_call_result=Bot2InteractionContext.model_validate(latest_call_result) if latest_call_result else None,
+        recommended_next_step=recommended_next_step,
+        sales_summary=sales_summary,
+    )
 
 
 async def build_company_consultation_package(session: AsyncSession, company_id: int) -> dict[str, str] | None:

@@ -1,12 +1,12 @@
-# TASKS — BOT 1 CRM
+# TASKS - BOT 1 CRM
 
 ## Current Sprint
 
-- [ ] Lead source analytics
 - [ ] Website/social research enrichment
 - [ ] Manager roles and multi-user CRM
 - [ ] Real document templates with реквизиты
-- [ ] Real Bot 2 push integration, if still not connected
+- [ ] Bot 2 uses consultation context inside the audit and proposal flow
+- [ ] Advanced conversion attribution
 
 ## Backlog
 
@@ -34,6 +34,8 @@
 - Company filters by status/city/priority
 - Bot 2 handoff API ready
 - Bot 2 handoff smoke check
+- Bot 2 consultation context endpoint
+- Bot 2 consultation context smoke check
 - Manager daily digest
 - Overdue tasks screen
 - Today tasks screen
@@ -55,6 +57,16 @@
 - Proposal history
 - Proposal API endpoints
 - Proposal smoke check
+- CRM funnel analytics
+- Lead source analytics
+- City/region analytics
+- Rule-based lead scoring
+- Cold base screen
+- Score block in company card
+- Digest scoring integration
+- Analytics CSV export
+- Analytics API endpoints
+- Analytics smoke check
 - Bot 2 handoff API via `/api/bot2/*`
 - Bot 2 consultation result -> CRM status / interaction / follow-up task mapping
 - `GET /api/companies` filters by status/city/priority

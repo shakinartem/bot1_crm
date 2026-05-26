@@ -7,6 +7,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from app.database import async_session_factory
+from app.modules.analytics.service import format_company_card_with_score
 from app.modules.ai.service import prepare_cold_call
 from app.modules.crm.constants import CONTACT_TYPE_LABELS, ContactType
 from app.modules.crm.handoff import build_consultation_handoff_payload
@@ -228,7 +229,7 @@ async def _show_company_card(message: Message, company_id: int, *, edit: bool = 
     if not company:
         return False
 
-    text = format_company_card(company)
+    text = format_company_card_with_score(company)
     markup = company_actions(company_id)
     if edit:
         await _safe_edit_message(message, text, reply_markup=markup, parse_mode="HTML")

@@ -96,9 +96,58 @@ Example:
 Preferred endpoints for SHARiK digital Consultation AI:
 
 - `GET /api/bot2/consultation-ready`
+- `GET /api/bot2/companies/{company_id}/consultation-context`
 - `POST /api/bot2/companies/{company_id}/consultation-result`
 
 `GET /api/bot2/consultation-ready` returns companies with status `consultation_planned`.
+
+`GET /api/bot2/companies/{company_id}/consultation-context` returns the structured sales context used by BOT 2 for audit and proposal generation. The payload includes:
+
+- `company`
+- `decision_makers`
+- `contacts`
+- `recent_interactions`
+- `open_tasks`
+- `latest_proposal`
+- `latest_call_result`
+- `recommended_next_step`
+- `sales_summary`
+
+Example response shape:
+
+```json
+{
+  "company": {
+    "id": 42,
+    "name": "Клиника Улыбка",
+    "city": "Саратов",
+    "status": "consultation_planned",
+    "priority": "high"
+  },
+  "decision_makers": [
+    {
+      "id": 7,
+      "full_name": "Анна Иванова",
+      "role": "Владелец",
+      "is_primary": true
+    }
+  ],
+  "contacts": [
+    {
+      "id": 12,
+      "type": "telegram",
+      "value": "@clinic_owner",
+      "is_primary": true
+    }
+  ],
+  "recent_interactions": [],
+  "open_tasks": [],
+  "latest_proposal": null,
+  "latest_call_result": null,
+  "recommended_next_step": "Провести консультацию и уточнить узкое место digital-воронки.",
+  "sales_summary": "Источник: cold_base. Статус: consultation_planned."
+}
+```
 
 `POST /api/bot2/companies/{company_id}/consultation-result` accepts:
 
@@ -279,6 +328,49 @@ Smoke check:
 python scripts/smoke_proposals.py
 ```
 
+## Lead Analytics and Scoring
+
+Use the Telegram main menu button `📈 Аналитика` to open CRM analytics.
+
+What is available:
+
+- CRM funnel analytics by current statuses
+- lead source analytics grouped by `company.source`
+- city and region analytics with stale lead and overdue task signals
+- rule-based lead scoring with `cold`, `warm`, `hot`, and `priority` grades
+- hot lead and cold base screens in Telegram
+- score block inside company cards
+- scoring-aware daily digest prioritization
+- analytics CSV export to `storage/exports/analytics/`
+
+API endpoints:
+
+- `GET /api/analytics/funnel`
+- `GET /api/analytics/sources`
+- `GET /api/analytics/cities`
+- `GET /api/analytics/scores`
+- `GET /api/analytics/cold-base`
+- `GET /api/companies/{id}/score`
+- `GET /api/analytics/export?type=funnel`
+- `GET /api/analytics/export?type=sources`
+- `GET /api/analytics/export?type=cities`
+- `GET /api/analytics/export?type=scores`
+- `GET /api/analytics/export?type=cold_base`
+
+Score highlights:
+
+- base signals: site, phone, city, LPR, notes/history
+- status contribution: `new` to `proposal_sent`, with hard stops for `deal_lost` and `do_not_contact`
+- task urgency: today/overdue follow-up boosts priority for warm and hot leads
+- freshness: recent touchpoints help, stale leads lose score
+- next-best-action recommendation is returned for every lead
+
+Smoke check:
+
+```bash
+python scripts/smoke_analytics.py
+```
+
 ## Smoke Checks
 
 Basic repo smoke check:
@@ -291,6 +383,12 @@ Bot 2 handoff smoke check:
 
 ```bash
 python scripts/smoke_bot2_handoff.py
+```
+
+Bot 2 consultation context smoke check:
+
+```bash
+python scripts/smoke_bot2_context.py
 ```
 
 Digest module smoke test:
@@ -307,6 +405,18 @@ It verifies:
 - company status update to `interested`
 - consultation interaction creation
 - follow-up task creation
+
+Consultation context smoke verifies:
+
+- company creation
+- decision maker creation
+- contact creation
+- call interaction
+- proposal interaction
+- open task
+- `GET /api/bot2/companies/{id}/consultation-context`
+- auth via `BOT2_API_TOKEN`
+- required response blocks for BOT 2
 
 Export CSV includes:
 
@@ -398,7 +508,30 @@ uvicorn app.main:app --reload --port 8002
 - confirm the company from BOT 1 is visible
 - open the card
 - generate audit
+- generate proposal
 - generate DOCX
 - set result `Думает` or `Договор отправлен`
 
 5. In BOT 1 verify company status, interaction, and follow-up task were updated.
+
+## Docker Future / Local Compose Notes
+
+Dev files in this repo:
+
+- `Dockerfile.dev`
+- `.dockerignore`
+
+The local 2-bot compose example lives in the BOT 2 repository at `docker/docker-compose.dev.yml`. Right now it is intended to start only:
+
+- `bot1-crm`
+- `bot2-consultation`
+
+Future placeholders for `bot3-content`, `bot4-autoposter`, and `bot5-reporter` are documented there but are not active yet.
+
+Inside Docker networking, BOT 2 should call BOT 1 with:
+
+```text
+http://bot1-crm:8000
+```
+
+The MVP still uses SQLite. PostgreSQL and Redis can be introduced later for production orchestration.

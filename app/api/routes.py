@@ -4,9 +4,28 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.database import get_session
+from app.modules.analytics.schemas import (
+    AnalyticsExportResult,
+    CityAnalyticsItem,
+    ColdBaseItem,
+    FunnelAnalyticsRead,
+    LeadScoreListRead,
+    LeadScoreRead,
+    SourceAnalyticsItem,
+)
+from app.modules.analytics.service import (
+    build_city_analytics,
+    build_cold_base,
+    build_funnel_analytics,
+    build_source_analytics,
+    export_analytics_csv,
+    get_company_lead_score,
+    list_lead_scores,
+)
 from app.modules.ai.service import prepare_cold_call
 from app.modules.crm import service as crm_service
 from app.modules.crm.schemas import (
+    Bot2ConsultationContextRead,
     Bot2ConsultationResultCreate,
     CompanyCreate,
     CompanyRead,
@@ -179,6 +198,102 @@ async def digest_stale_leads(
     return await get_stale_leads(session, days_without_interaction=days_without_interaction, limit=limit)
 
 
+@api_router.get("/analytics/funnel", response_model=FunnelAnalyticsRead)
+async def analytics_funnel(
+    session: AsyncSession = Depends(get_session),
+    status: str | None = None,
+    source: str | None = None,
+    city: str | None = None,
+):
+    return await build_funnel_analytics(session, status=status, source=source, city=city)
+
+
+@api_router.get("/analytics/sources", response_model=list[SourceAnalyticsItem])
+async def analytics_sources(
+    session: AsyncSession = Depends(get_session),
+    limit: int = 50,
+    status: str | None = None,
+    source: str | None = None,
+    city: str | None = None,
+):
+    return await build_source_analytics(session, status=status, source=source, city=city, limit=limit)
+
+
+@api_router.get("/analytics/cities", response_model=list[CityAnalyticsItem])
+async def analytics_cities(
+    session: AsyncSession = Depends(get_session),
+    limit: int = 50,
+    status: str | None = None,
+    source: str | None = None,
+    city: str | None = None,
+):
+    return await build_city_analytics(session, status=status, source=source, city=city, limit=limit)
+
+
+@api_router.get("/analytics/scores", response_model=LeadScoreListRead)
+async def analytics_scores(
+    session: AsyncSession = Depends(get_session),
+    limit: int = 20,
+    status: str | None = None,
+    source: str | None = None,
+    city: str | None = None,
+    grade: str | None = None,
+    min_score: int | None = None,
+    max_score: int | None = None,
+):
+    items = await list_lead_scores(
+        session,
+        limit=limit,
+        status=status,
+        source=source,
+        city=city,
+        grade=grade,
+        min_score=min_score,
+        max_score=max_score,
+    )
+    return LeadScoreListRead(total=len(items), items=items)
+
+
+@api_router.get("/analytics/cold-base", response_model=list[ColdBaseItem])
+async def analytics_cold_base(
+    session: AsyncSession = Depends(get_session),
+    limit: int = 50,
+    source: str | None = None,
+    city: str | None = None,
+):
+    return await build_cold_base(session, limit=limit, source=source, city=city)
+
+
+@api_router.get("/analytics/export")
+async def analytics_export(
+    type: str,
+    session: AsyncSession = Depends(get_session),
+    limit: int = 200,
+    status: str | None = None,
+    source: str | None = None,
+    city: str | None = None,
+    grade: str | None = None,
+    min_score: int | None = None,
+    max_score: int | None = None,
+):
+    result = await export_analytics_csv(
+        session,
+        type,
+        limit=limit,
+        status=status,
+        source=source,
+        city=city,
+        grade=grade,
+        min_score=min_score,
+        max_score=max_score,
+    )
+    return FileResponse(
+        result.file_path,
+        media_type="text/csv",
+        filename=result.filename,
+    )
+
+
 @api_router.get("/proposals/packages", response_model=list[PackageRead])
 async def proposals_packages():
     return package_catalog_payload()
@@ -300,6 +415,17 @@ async def get_company(
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
     return company
+
+
+@api_router.get("/companies/{company_id}/score", response_model=LeadScoreRead)
+async def company_score(
+    company_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    result = await get_company_lead_score(session, company_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Company not found")
+    return result
 
 
 @api_router.patch("/companies/{company_id}", response_model=CompanyRead)
@@ -477,6 +603,21 @@ async def bot2_consultation_ready(
     offset: int = 0,
 ):
     return await crm_service.list_bot2_consultation_ready(session, limit=limit, offset=offset)
+
+
+@bot2_router.get(
+    "/companies/{company_id}/consultation-context",
+    response_model=Bot2ConsultationContextRead,
+    dependencies=[Depends(require_bot2_auth)],
+)
+async def bot2_consultation_context(
+    company_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    context = await crm_service.build_bot2_consultation_context(session, company_id)
+    if not context:
+        raise HTTPException(status_code=404, detail="Company not found")
+    return context
 
 
 @bot2_router.post(

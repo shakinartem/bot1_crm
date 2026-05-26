@@ -19,6 +19,16 @@
 - Added proposal history.
 - Added proposal/contract API endpoints.
 - Added smoke_proposals.py.
+- Added CRM funnel analytics.
+- Added lead source analytics.
+- Added city and region analytics.
+- Added rule-based lead scoring.
+- Added cold base screen.
+- Added score block to company cards.
+- Integrated scoring into daily digest.
+- Added analytics CSV exports.
+- Added analytics API endpoints.
+- Added smoke_analytics.py.
 - Added company export workflow in Telegram.
 - Added CSV export with CRM filters.
 - Added consultation package preview for company cards.

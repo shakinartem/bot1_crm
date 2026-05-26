@@ -162,3 +162,88 @@ class Bot2ConsultationResultCreate(BaseModel):
     result: Literal["refused", "thinking", "contract_sent", "signed"]
     summary: str = Field(min_length=1)
     source: str = Field(default="bot2", min_length=1)
+
+
+class Bot2CompanyContext(BaseModel):
+    id: int
+    name: str
+    legal_name: str | None = None
+    city: str | None = None
+    region: str | None = None
+    address: str | None = None
+    phone: str | None = None
+    website: str | None = None
+    maps_url: str | None = None
+    vk_url: str | None = None
+    instagram_url: str | None = None
+    telegram_url: str | None = None
+    other_socials: str | None = None
+    social_links: str | None = None
+    rating: float | None = None
+    reviews_count: int | None = None
+    source: str | None = None
+    status: str
+    priority: str
+    notes: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class Bot2DecisionMakerContext(BaseModel):
+    id: int
+    full_name: str
+    role: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    telegram: str | None = None
+    is_primary: bool
+    notes: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class Bot2ContactContext(BaseModel):
+    id: int
+    type: str
+    value: str
+    label: str | None = None
+    is_primary: bool
+    notes: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class Bot2InteractionContext(BaseModel):
+    id: int
+    type: str
+    result: str | None = None
+    summary: str | None = None
+    next_action: str | None = None
+    next_action_at: datetime | None = None
+    created_by: str | None = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class Bot2TaskContext(BaseModel):
+    id: int
+    title: str
+    description: str | None = None
+    due_at: datetime | None = None
+    priority: str
+    status: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class Bot2ConsultationContextRead(BaseModel):
+    company: Bot2CompanyContext
+    decision_makers: list[Bot2DecisionMakerContext]
+    contacts: list[Bot2ContactContext]
+    recent_interactions: list[Bot2InteractionContext]
+    open_tasks: list[Bot2TaskContext]
+    latest_proposal: Bot2InteractionContext | None = None
+    latest_call_result: Bot2InteractionContext | None = None
+    recommended_next_step: str
+    sales_summary: str
