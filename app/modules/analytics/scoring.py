@@ -137,6 +137,53 @@ def calculate_lead_score(company_context: dict) -> LeadScoreRead:
         score -= 10
         risks.append("нет активной follow-up задачи")
 
+    enrichment_status = company_context.get("enrichment_status")
+    enrichment_signals = company_context.get("enrichment_signals") or {}
+    enrichment_socials = company_context.get("enrichment_socials") or {}
+    enrichment_maps = company_context.get("enrichment_maps") or {}
+    enrichment_contacts = company_context.get("enrichment_contacts") or {}
+
+    if enrichment_status == "success":
+        score += 5
+        reasons.append("проведен research сайта")
+    elif enrichment_status == "failed":
+        score -= 10
+        risks.append("сайт недоступен при быстрой проверке")
+
+    if company_context["has_website"] and (
+        enrichment_signals.get("has_online_booking") or enrichment_signals.get("has_callback_form")
+    ):
+        score += 5
+        reasons.append("на сайте есть запись или форма обращения")
+    elif enrichment_status in {"success", "partial"} and not (
+        enrichment_signals.get("has_online_booking") or enrichment_signals.get("has_callback_form")
+    ):
+        score -= 5
+        risks.append("не обнаружена явная запись или callback-форма")
+
+    if any(enrichment_socials.values()):
+        score += 5
+        reasons.append("на сайте найдены соцсети")
+    elif enrichment_status in {"success", "partial"}:
+        risks.append("не обнаружены быстрые мессенджеры")
+
+    if any(enrichment_maps.values()) or enrichment_signals.get("has_reviews_section"):
+        score += 5
+        reasons.append("есть карты или сигналы отзывов")
+
+    if not enrichment_contacts.get("phones") and not enrichment_contacts.get("emails") and not company_context["has_phone"]:
+        score -= 5
+        risks.append("не обнаружены контакты на сайте и в карточке")
+
+    if enrichment_status in {"success", "partial"} and not enrichment_signals.get("has_reviews_section"):
+        risks.append("на сайте не найден явный блок отзывов")
+
+    if enrichment_status in {"success", "partial"} and not (
+        enrichment_signals.get("has_reviews_section") or enrichment_signals.get("has_doctors_page")
+    ):
+        score -= 5
+        risks.append("на сайте мало доверительных сигналов")
+
     next_best_action = _next_best_action(company_context)
     return _finalize(company_context, score, reasons, risks, next_best_action)
 

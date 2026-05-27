@@ -2,11 +2,11 @@
 
 ## Current Sprint
 
-- [ ] Website/social research enrichment
 - [ ] Manager roles and multi-user CRM
 - [ ] Real document templates with реквизиты
-- [ ] Bot 2 uses consultation context inside the audit and proposal flow
+- [ ] Real Bot 2 push integration
 - [ ] Advanced conversion attribution
+- [ ] External maps/reviews enrichment, if needed
 
 ## Backlog
 
@@ -67,6 +67,18 @@
 - Analytics CSV export
 - Analytics API endpoints
 - Analytics smoke check
+- Website research enrichment
+- Enrichment snapshots
+- Social/contact/map detection
+- Website signals and hypotheses
+- AI enrichment summary
+- Research Telegram workflow
+- Enrichment API endpoints
+- Enrichment integration with call prep
+- Enrichment integration with proposals
+- Enrichment integration with scoring
+- Enrichment Bot2 context block
+- Enrichment smoke check
 - Bot 2 handoff API via `/api/bot2/*`
 - Bot 2 consultation result -> CRM status / interaction / follow-up task mapping
 - `GET /api/companies` filters by status/city/priority
@@ -84,7 +96,6 @@
 ## Future Integrations
 
 - Bot 2 Consultation AI handoff via real API/events/export.
-- Clinic enrichment from website/social/maps research.
 - Legal-data verification via ФНС.
 - Transcription via `faster-whisper` or `whisper.cpp`.
 - Telephony integration.

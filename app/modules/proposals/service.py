@@ -23,6 +23,7 @@ from app.modules.crm.constants import (
 from app.modules.crm.models import Company, FollowUpTask, LeadInteraction
 from app.modules.crm.schemas import InteractionCreate
 from app.modules.crm.service import add_interaction, get_company, humanize_company_status
+from app.modules.enrichment.service import build_enrichment_context_for_company
 from app.modules.proposals.models import ProposalDraft
 from app.modules.proposals.packages import PACKAGE_ORDER, SERVICE_PACKAGES, ServicePackage
 from app.modules.proposals.prompts import build_commercial_proposal_prompt
@@ -74,6 +75,7 @@ async def suggest_packages_for_company(session: AsyncSession, company_id: int) -
     ai_call_prep = await prepare_cold_call(session, company_id)
     haystack = _build_analysis_text(company, ai_call_prep)
     suggestions: dict[str, PackageSuggestion] = {}
+    enrichment = await build_enrichment_context_for_company(session, company_id)
 
     data_is_sparse = _is_sparse(company)
     if data_is_sparse:
@@ -97,6 +99,69 @@ async def suggest_packages_for_company(session: AsyncSession, company_id: int) -
                 "medium",
             ),
         )
+
+    if enrichment:
+        if not (enrichment.signals.has_online_booking or enrichment.signals.has_callback_form):
+            suggestions.setdefault(
+                "landing_start",
+                _make_suggestion(
+                    "landing_start",
+                    "По быстрому research не видно явной записи или callback-формы, поэтому стоит начать с посадочной точки и конверсии сайта.",
+                    "high",
+                ),
+            )
+            suggestions.setdefault(
+                "audit_roadmap",
+                _make_suggestion(
+                    "audit_roadmap",
+                    "Research показывает риск потери пациента между сайтом и обращением, поэтому безопасный первый шаг — диагностическая карта воронки.",
+                    "high",
+                ),
+            )
+        if not enrichment.signals.has_reviews_section or not any(enrichment.detected_maps.values()):
+            suggestions.setdefault(
+                "maps_reputation",
+                _make_suggestion(
+                    "maps_reputation",
+                    "В research мало сигналов отзывов или карт, поэтому стоит усилить локальное доверие и репутационные точки входа.",
+                    "medium",
+                ),
+            )
+        if not any(enrichment.detected_socials.values()):
+            suggestions.setdefault(
+                "smm_funnel",
+                _make_suggestion(
+                    "smm_funnel",
+                    "В research не обнаружены явные соцсети, поэтому стоит проверить, как клиника прогревает аудиторию вне сайта.",
+                    "medium",
+                ),
+            )
+        if enrichment.signals.has_implantation_keywords:
+            suggestions.setdefault(
+                "complex_growth",
+                _make_suggestion(
+                    "complex_growth",
+                    "На сайте видны сигналы имплантации, поэтому можно осторожно обсуждать комплексный рост вокруг более дорогих услуг.",
+                    "medium",
+                ),
+            )
+        if any("теряется" in item.lower() for item in enrichment.hypotheses):
+            suggestions.setdefault(
+                "crm_bot",
+                _make_suggestion(
+                    "crm_bot",
+                    "Research даёт гипотезу потери пациента на пути до обращения, поэтому стоит рассмотреть CRM- и follow-up-автоматизацию.",
+                    "medium",
+                ),
+            )
+            suggestions.setdefault(
+                "audit_roadmap",
+                _make_suggestion(
+                    "audit_roadmap",
+                    "Research указывает на возможные точки потери пациента, поэтому стоит начать с диагностического roadmap.",
+                    "high",
+                ),
+            )
 
     for code, keywords in PACKAGE_KEYWORDS.items():
         if any(keyword in haystack for keyword in keywords):
@@ -319,6 +384,7 @@ async def _load_company_context(session: AsyncSession, company_id: int) -> Compa
             selectinload(Company.interactions),
             selectinload(Company.tasks),
             selectinload(Company.proposal_drafts),
+            selectinload(Company.enrichment_snapshots),
         )
     )
     return result.scalar_one_or_none()

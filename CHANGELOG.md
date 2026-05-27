@@ -29,6 +29,16 @@
 - Added analytics CSV exports.
 - Added analytics API endpoints.
 - Added smoke_analytics.py.
+- Added website/social research enrichment module.
+- Added EnrichmentSnapshot model and migration.
+- Added lightweight website fetch and HTML analyzer.
+- Added social/contact/map detection.
+- Added website signals and rule-based hypotheses.
+- Added AI/fallback enrichment summary.
+- Added Research workflow in Telegram company cards.
+- Added enrichment API endpoints.
+- Integrated enrichment into AI call prep, proposals, scoring, and Bot 2 consultation context.
+- Added smoke_enrichment.py.
 - Added company export workflow in Telegram.
 - Added CSV export with CRM filters.
 - Added consultation package preview for company cards.

@@ -211,8 +211,11 @@ def format_company_card_with_score(company: Company) -> str:
     from app.modules.crm.service import format_company_card
 
     score = build_company_lead_score(company)
+    research_text = _format_research_summary(company)
     lines = [
         format_company_card(company),
+        "",
+        research_text,
         "",
         "🔥 <b>Скоринг:</b>",
         f"Оценка: {score.score}/100 — {escape(score.grade)}",
@@ -346,6 +349,7 @@ async def _load_companies(session: AsyncSession, filters: AnalyticsFilters) -> l
             selectinload(Company.contacts),
             selectinload(Company.interactions),
             selectinload(Company.tasks),
+            selectinload(Company.enrichment_snapshots),
         )
         .order_by(Company.created_at.desc())
     )
@@ -371,6 +375,7 @@ async def _load_company(session: AsyncSession, company_id: int) -> Company | Non
             selectinload(Company.contacts),
             selectinload(Company.interactions),
             selectinload(Company.tasks),
+            selectinload(Company.enrichment_snapshots),
         )
     )
     return result.scalar_one_or_none()
@@ -380,6 +385,7 @@ def _company_context(company: Company) -> dict:
     now = datetime.now()
     interactions = sorted(company.interactions, key=lambda item: item.created_at or datetime.min, reverse=True)
     tasks = [task for task in company.tasks if task.status == TaskStatus.OPEN.value]
+    latest_enrichment = _latest_enrichment_snapshot(company)
     last_interaction = interactions[0] if interactions else None
     days_without_interaction = None
     if last_interaction and last_interaction.created_at:
@@ -404,6 +410,11 @@ def _company_context(company: Company) -> dict:
         "has_task_today": any(task.due_at and task.due_at.date() == now.date() for task in tasks),
         "has_open_task": bool(tasks),
         "has_overdue_task": any(task.due_at and task.due_at < now for task in tasks),
+        "enrichment_status": latest_enrichment.status if latest_enrichment else None,
+        "enrichment_signals": _snapshot_json_dict(latest_enrichment.signals_json if latest_enrichment else None),
+        "enrichment_socials": _snapshot_json_dict(latest_enrichment.detected_socials_json if latest_enrichment else None),
+        "enrichment_maps": _snapshot_json_dict(latest_enrichment.detected_maps_json if latest_enrichment else None),
+        "enrichment_contacts": _snapshot_json_dict(latest_enrichment.detected_contacts_json if latest_enrichment else None),
     }
 
 
@@ -508,3 +519,52 @@ def _analytics_exports_dir() -> Path:
     export_dir = get_settings().storage_path / "exports" / "analytics"
     export_dir.mkdir(parents=True, exist_ok=True)
     return export_dir
+
+
+def _latest_enrichment_snapshot(company: Company):
+    snapshots = getattr(company, "enrichment_snapshots", None) or []
+    if not snapshots:
+        return None
+    return max(snapshots, key=lambda item: ((item.created_at or datetime.min), item.id))
+
+
+def _snapshot_json_dict(value: str | None) -> dict:
+    import json
+
+    if not value:
+        return {}
+    try:
+        payload = json.loads(value)
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _format_research_summary(company: Company) -> str:
+    latest = _latest_enrichment_snapshot(company)
+    if not latest:
+        return "🔎 <b>Research:</b>\nне проводился"
+
+    signals = _snapshot_json_dict(latest.signals_json)
+    import json
+
+    try:
+        parsed = json.loads(latest.hypotheses_json or "[]")
+    except json.JSONDecodeError:
+        parsed = []
+    hypotheses_count = len(parsed) if isinstance(parsed, list) else 0
+
+    signal_bits = [
+        f"онлайн-запись: {'да' if signals.get('has_online_booking') else 'нет'}",
+        f"отзывы: {'да' if signals.get('has_reviews_section') else 'нет'}",
+        f"мессенджеры: {'да' if signals.get('has_messenger_links') else 'нет'}",
+    ]
+    return "\n".join(
+        [
+            "🔎 <b>Research:</b>",
+            f"Последний: {latest.created_at:%d.%m.%Y %H:%M} — {escape(latest.status)}",
+            f"Сайт: {escape(latest.website_url or company.website or 'не указан')}",
+            f"Сигналы: {escape(', '.join(signal_bits[:3]))}",
+            f"Гипотезы: {hypotheses_count}",
+        ]
+    )

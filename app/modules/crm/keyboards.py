@@ -75,6 +75,7 @@ def company_actions(company_id: int) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="📜 История", callback_data=f"company:history:{company_id}:0"),
                 InlineKeyboardButton(text="🤖 AI-подготовка", callback_data=f"company:ai:{company_id}"),
             ],
+            [InlineKeyboardButton(text="🔎 Research", callback_data=f"research:open:{company_id}")],
             [
                 InlineKeyboardButton(text="📦 Пакет консультации", callback_data=f"consult:package:{company_id}"),
                 InlineKeyboardButton(text="📄 КП / Договор", callback_data=f"proposal:open:{company_id}"),
@@ -88,12 +89,7 @@ def company_actions(company_id: int) -> InlineKeyboardMarkup:
 
 def company_list_markup(companies: list[Any]) -> InlineKeyboardMarkup:
     rows = [
-        [
-            InlineKeyboardButton(
-                text=f"#{company.id} {company.name[:28]}",
-                callback_data=f"company:open:{company.id}",
-            )
-        ]
+        [InlineKeyboardButton(text=f"#{company.id} {company.name[:28]}", callback_data=f"company:open:{company.id}")]
         for company in companies
     ]
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -101,12 +97,7 @@ def company_list_markup(companies: list[Any]) -> InlineKeyboardMarkup:
 
 def stats_company_list_markup(companies: list[Any]) -> InlineKeyboardMarkup:
     rows = [
-        [
-            InlineKeyboardButton(
-                text=f"#{company.id} {company.name[:28]}",
-                callback_data=f"company:open:{company.id}",
-            )
-        ]
+        [InlineKeyboardButton(text=f"#{company.id} {company.name[:28]}", callback_data=f"company:open:{company.id}")]
         for company in companies
     ]
     rows.append([InlineKeyboardButton(text="⬅️ К статистике", callback_data="stats:menu")])
@@ -114,10 +105,7 @@ def stats_company_list_markup(companies: list[Any]) -> InlineKeyboardMarkup:
 
 
 def call_results_markup(company_id: int) -> InlineKeyboardMarkup:
-    rows = [
-        [InlineKeyboardButton(text=label, callback_data=f"call:pick:{company_id}:{code}")]
-        for label, code in CALL_RESULT_OPTIONS
-    ]
+    rows = [[InlineKeyboardButton(text=label, callback_data=f"call:pick:{company_id}:{code}")] for label, code in CALL_RESULT_OPTIONS]
     rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data=f"company:open:{company_id}")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -145,14 +133,7 @@ def decision_maker_confirm_markup(company_id: int) -> InlineKeyboardMarkup:
 def history_markup(company_id: int, next_offset: int | None) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     if next_offset is not None:
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text="Показать ещё",
-                    callback_data=f"company:history:{company_id}:{next_offset}",
-                )
-            ]
-        )
+        rows.append([InlineKeyboardButton(text="Показать ещё", callback_data=f"company:history:{company_id}:{next_offset}")])
     rows.append([InlineKeyboardButton(text="⬅️ Назад к карточке", callback_data=f"company:open:{company_id}")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 

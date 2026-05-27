@@ -63,6 +63,10 @@ class Company(Base):
         back_populates="company",
         cascade="all, delete-orphan",
     )
+    enrichment_snapshots: Mapped[list["EnrichmentSnapshot"]] = relationship(
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
 
 
 class DecisionMaker(Base):
@@ -153,4 +157,5 @@ Task = FollowUpTask
 
 
 from app.modules.calls.models import CallRecord  # noqa: E402,F401
+from app.modules.enrichment.models import EnrichmentSnapshot  # noqa: E402,F401
 from app.modules.proposals.models import ProposalDraft  # noqa: E402,F401

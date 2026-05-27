@@ -371,6 +371,64 @@ Smoke check:
 python scripts/smoke_analytics.py
 ```
 
+## Website and Social Research Enrichment
+
+Use the company card button `🔎 Research` to open website and social research enrichment.
+
+What is available:
+
+- lightweight single-page website check via `httpx`
+- manual website input when the company card has no website
+- detection of socials, contacts, maps/platforms, and basic website signals
+- cautious rule-based hypotheses about the digital funnel
+- optional AI summary on top of the rule-based snapshot
+- enrichment snapshot history stored per company
+- reuse of enrichment in AI call prep, package suggestion, scoring, and Bot 2 consultation context
+
+Research menu actions:
+
+- `🌐 Проверить сайт`
+- `✍️ Ввести сайт вручную`
+- `📌 Последний research`
+- `📜 История research`
+- `🤖 AI-резюме`
+
+Signals include:
+
+- online booking
+- callback form
+- prices
+- doctors page
+- reviews section
+- contacts page
+- social links
+- messenger links
+- privacy policy
+- promotions
+- implantation, orthodontics, children dentistry, and emergency keywords
+
+API endpoints:
+
+- `POST /api/companies/{company_id}/enrichment/website`
+- `GET /api/companies/{company_id}/enrichment/latest`
+- `GET /api/companies/{company_id}/enrichment/history`
+- `GET /api/companies/{company_id}/enrichment/{snapshot_id}`
+
+Smoke check:
+
+```bash
+python scripts/smoke_enrichment.py
+```
+
+Limitations:
+
+- lightweight single-page fetch only
+- no Selenium or Playwright
+- no aggressive scraping or crawl
+- no anti-bot bypass
+- no guarantees or hard conclusions when data is limited
+- all findings are framed as cautious hypotheses for manager research
+
 ## Smoke Checks
 
 Basic repo smoke check:

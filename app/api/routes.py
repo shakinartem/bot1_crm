@@ -49,6 +49,13 @@ from app.modules.digest.service import (
 )
 from app.modules.exports.service import ExportFilters, export_companies_to_csv
 from app.modules.imports.service import import_companies_from_csv, preview_companies_from_csv, save_import_file
+from app.modules.enrichment.schemas import EnrichmentRequest, EnrichmentResultRead, EnrichmentSnapshotRead
+from app.modules.enrichment.service import (
+    enrich_company_website,
+    get_enrichment_history,
+    get_enrichment_snapshot,
+    get_latest_enrichment,
+)
 from app.modules.proposals.keyboards import package_catalog_payload
 from app.modules.proposals.schemas import (
     ContractActionRequest,
@@ -426,6 +433,55 @@ async def company_score(
     if not result:
         raise HTTPException(status_code=404, detail="Company not found")
     return result
+
+
+@api_router.post("/companies/{company_id}/enrichment/website", response_model=EnrichmentResultRead)
+async def company_enrichment_website(
+    company_id: int,
+    payload: EnrichmentRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await enrich_company_website(
+            session,
+            company_id,
+            website_url=payload.website_url,
+            use_ai=payload.use_ai,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@api_router.get("/companies/{company_id}/enrichment/latest", response_model=EnrichmentSnapshotRead)
+async def company_enrichment_latest(
+    company_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    snapshot = await get_latest_enrichment(session, company_id)
+    if not snapshot:
+        raise HTTPException(status_code=404, detail="Enrichment snapshot not found")
+    return snapshot
+
+
+@api_router.get("/companies/{company_id}/enrichment/history", response_model=list[EnrichmentSnapshotRead])
+async def company_enrichment_history(
+    company_id: int,
+    session: AsyncSession = Depends(get_session),
+    limit: int = 10,
+):
+    return await get_enrichment_history(session, company_id, limit=limit)
+
+
+@api_router.get("/companies/{company_id}/enrichment/{snapshot_id}", response_model=EnrichmentSnapshotRead)
+async def company_enrichment_snapshot(
+    company_id: int,
+    snapshot_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    snapshot = await get_enrichment_snapshot(session, company_id, snapshot_id)
+    if not snapshot:
+        raise HTTPException(status_code=404, detail="Enrichment snapshot not found")
+    return snapshot
 
 
 @api_router.patch("/companies/{company_id}", response_model=CompanyRead)

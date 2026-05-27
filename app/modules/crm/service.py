@@ -154,6 +154,7 @@ async def get_company(session: AsyncSession, company_id: int) -> Company | None:
             selectinload(Company.interactions),
             selectinload(Company.tasks),
             selectinload(Company.calls),
+            selectinload(Company.enrichment_snapshots),
         )
     )
     return result.scalar_one_or_none()
@@ -694,6 +695,8 @@ async def build_bot2_consultation_context(
     session: AsyncSession,
     company_id: int,
 ) -> Bot2ConsultationContextRead | None:
+    from app.modules.enrichment.service import build_enrichment_context_for_company
+
     company = await get_company(session, company_id)
     if not company:
         return None
@@ -760,6 +763,7 @@ async def build_bot2_consultation_context(
         latest_call_result=Bot2InteractionContext.model_validate(latest_call_result) if latest_call_result else None,
         recommended_next_step=recommended_next_step,
         sales_summary=sales_summary,
+        enrichment=await build_enrichment_context_for_company(session, company_id),
     )
 
 

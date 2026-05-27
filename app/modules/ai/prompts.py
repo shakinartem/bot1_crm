@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from app.modules.crm.models import Company
+from app.modules.enrichment.schemas import Bot2EnrichmentContextRead
 
 
-def build_cold_call_prompt(company: Company) -> str:
+def build_cold_call_prompt(company: Company, enrichment: Bot2EnrichmentContextRead | None = None) -> str:
     decision_makers = "\n".join(
         f"- {dm.full_name}, {dm.role or 'роль не указана'}, телефон: {dm.phone or 'нет'}, Telegram: {dm.telegram or 'нет'}"
         for dm in company.decision_makers
@@ -12,6 +13,25 @@ def build_cold_call_prompt(company: Company) -> str:
         f"- {item.created_at:%Y-%m-%d}: {item.type}, результат: {item.result or 'нет'}, кратко: {item.summary or 'нет'}"
         for item in company.interactions[:10]
     ) or "Истории касаний пока нет."
+
+    enrichment_block = "Исследование сайта пока не проводилось."
+    if enrichment:
+        social_names = ", ".join(key for key, value in enrichment.detected_socials.items() if value) or "не обнаружены"
+        map_names = ", ".join(key for key, value in enrichment.detected_maps.items() if value) or "не обнаружены"
+        hypothesis_lines = "\n".join(f"- {item}" for item in enrichment.hypotheses[:5]) or "- нет"
+        enrichment_block = (
+            f"- Статус research: {enrichment.status or 'нет'}\n"
+            f"- Сайт: {enrichment.website_url or company.website or 'не указан'}\n"
+            f"- Сигналы: запись {'да' if enrichment.signals.has_online_booking else 'нет'}, "
+            f"callback {'да' if enrichment.signals.has_callback_form else 'нет'}, "
+            f"отзывы {'да' if enrichment.signals.has_reviews_section else 'нет'}, "
+            f"врачи {'да' if enrichment.signals.has_doctors_page else 'нет'}, "
+            f"мессенджеры {'да' if enrichment.signals.has_messenger_links else 'нет'}\n"
+            f"- Соцсети: {social_names}\n"
+            f"- Карты/площадки: {map_names}\n"
+            f"- AI-резюме: {enrichment.ai_summary or 'нет'}\n"
+            f"- Гипотезы:\n{hypothesis_lines}"
+        )
 
     return f"""
 TASK: COLD_CALL_PREP
@@ -43,6 +63,9 @@ TASK: COLD_CALL_PREP
 История касаний:
 {interactions}
 
+Research сайта / digital-присутствия:
+{enrichment_block}
+
 Формула продаж:
 1. ФВ — финансовая возможность.
 2. ОП — осознанная потребность.
@@ -51,7 +74,7 @@ TASK: COLD_CALL_PREP
 5. ЗС — здесь и сейчас.
 
 Для выявления потребности используй СОПРАНО:
-С — ситуация, О — опыт, П — принципы, Р — решения, А — аналоги, Н — нежелательное, О — ограничения.
+С — ситуация, О — опыт, П — принципы, Р — решения, А — аналогии, Н — нежелательное, О — ограничения.
 
 Сгенерируй строго по разделам:
 1. Краткое резюме клиники.
@@ -65,7 +88,7 @@ TASK: COLD_CALL_PREP
 9. Короткий текст сообщения после звонка.
 10. Следующее действие.
 
-Пиши по-русски, практично, без воды. Не выдумывай факты, если данных нет: помечай их как гипотезы.
+Пиши по-русски, практично, без воды. Не выдумывай факты, если данных нет: помечай их как гипотезы. Учитывай research сайта при вопросах о форме записи, доверии, мессенджерах, отзывах и картах.
 """.strip()
 
 

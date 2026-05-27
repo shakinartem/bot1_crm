@@ -364,6 +364,7 @@ async def _load_digest_companies(session: AsyncSession) -> list[Company]:
             selectinload(Company.contacts),
             selectinload(Company.interactions),
             selectinload(Company.tasks),
+            selectinload(Company.enrichment_snapshots),
         )
         .order_by(Company.created_at.desc())
     )

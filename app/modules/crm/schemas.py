@@ -11,6 +11,7 @@ from app.modules.crm.constants import (
     LeadPriority,
     TaskStatus,
 )
+from app.modules.enrichment.schemas import Bot2EnrichmentContextRead
 
 
 class CompanyBase(BaseModel):
@@ -247,3 +248,4 @@ class Bot2ConsultationContextRead(BaseModel):
     latest_call_result: Bot2InteractionContext | None = None
     recommended_next_step: str
     sales_summary: str
+    enrichment: Bot2EnrichmentContextRead | None = None
