@@ -15,7 +15,9 @@ from app.modules.enrichment.handlers import router as enrichment_router
 from app.modules.exports.handlers import router as exports_router
 from app.modules.imports.handlers import router as imports_router
 from app.modules.intelligence.handlers import router as intelligence_router
+from app.modules.legal_discovery.handlers import router as legal_discovery_router
 from app.modules.proposals.handlers import router as proposals_router
+from app.modules.research_queue.handlers import router as research_queue_router
 
 
 async def main() -> None:
@@ -32,8 +34,10 @@ async def main() -> None:
     bot = Bot(token=settings.bot_token)
     dp = Dispatcher()
     dp.include_router(crm_router)
+    dp.include_router(legal_discovery_router)
     dp.include_router(enrichment_router)
     dp.include_router(intelligence_router)
+    dp.include_router(research_queue_router)
     dp.include_router(analytics_router)
     dp.include_router(proposals_router)
     dp.include_router(digest_router)

@@ -90,3 +90,13 @@
 - Changed CSV deduplication to include company name in addition to INN, phone, and website.
 - Changed AI call preparation prompt to include decision makers and interaction history.
 - Fixed unreadable Russian text in CRM services, Telegram handlers, CSV importer, call transcription stub, AI prompts, fallback provider, and README.
+- Added legal discovery module.
+- Added mock legal discovery provider.
+- Added legal discovery preview/import workflow.
+- Added research queue for parallel internet enrichment.
+- Added safe HTTP/browser fetch abstraction.
+- Added website resolver by INN/legal name.
+- Added site parser for contacts/socials/signals.
+- Added Telegram research workflow.
+- Added research API endpoints.
+- Added research batch CLI script.

@@ -3,7 +3,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.database import get_session
+from app.database import async_session_factory, get_session
 from app.modules.analytics.schemas import (
     AnalyticsExportResult,
     CityAnalyticsItem,
@@ -71,6 +71,13 @@ from app.modules.intelligence.service import (
     get_latest_intelligence,
     resolve_company_website,
 )
+from app.modules.legal_discovery.schemas import (
+    LegalDiscoveryImportRequest,
+    LegalDiscoveryImportResult,
+    LegalDiscoveryPreview,
+    LegalDiscoverySearchRequest,
+)
+from app.modules.legal_discovery.service import import_legal_discovery_preview, run_legal_discovery_preview
 from app.modules.proposals.keyboards import package_catalog_payload
 from app.modules.proposals.schemas import (
     ContractActionRequest,
@@ -90,6 +97,21 @@ from app.modules.proposals.service import (
     list_company_proposal_drafts,
     parse_selected_packages,
     suggest_packages_for_company,
+)
+from app.modules.research.schemas import ResearchResultRead, ResearchRunRequest
+from app.modules.research.service import get_latest_research, get_research_history, run_company_research
+from app.modules.research_queue.schemas import (
+    ResearchBatchRunRequest,
+    ResearchJobCreateRequest,
+    ResearchJobRead,
+    ResearchQueueStatusRead,
+)
+from app.modules.research_queue.service import (
+    create_research_jobs_for_companies,
+    get_queue_status,
+    get_research_jobs,
+    run_research_batch,
+    serialize_job,
 )
 
 router = APIRouter()
@@ -116,6 +138,32 @@ async def require_bot2_auth(authorization: str | None = Header(default=None)) ->
 @api_router.get("/health")
 async def api_health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@api_router.post("/legal-discovery/search", response_model=LegalDiscoveryPreview)
+async def legal_discovery_search(
+    payload: LegalDiscoverySearchRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    return await run_legal_discovery_preview(
+        session,
+        query=payload.query,
+        city=payload.city,
+        region=payload.region,
+        limit=payload.limit,
+        provider_code=payload.provider,
+    )
+
+
+@api_router.post("/legal-discovery/import", response_model=LegalDiscoveryImportResult)
+async def legal_discovery_import(
+    payload: LegalDiscoveryImportRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await import_legal_discovery_preview(session, payload.preview_id, payload.mode)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @api_router.get("/companies", response_model=list[CompanyRead])
@@ -565,6 +613,48 @@ async def company_intelligence_snapshot(
     return snapshot
 
 
+@api_router.post("/companies/{company_id}/research/run", response_model=ResearchResultRead)
+async def company_research_run(
+    company_id: int,
+    payload: ResearchRunRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    result = await run_company_research(session, company_id, force=payload.force)
+    return ResearchResultRead(
+        company_id=result.company_id,
+        status=result.status,
+        website_url=result.website_url,
+        website_confidence=result.website_confidence,
+        page_title=result.page_title,
+        hypotheses=result.hypotheses,
+        ai_summary=result.ai_summary,
+        error_message=result.error_message,
+        blocked_reason=result.blocked_reason,
+        snapshot_id=result.snapshot_id,
+        updated_fields=result.updated_fields,
+    )
+
+
+@api_router.get("/companies/{company_id}/research/latest", response_model=IntelligenceSnapshotRead)
+async def company_research_latest(
+    company_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    snapshot = await get_latest_research(session, company_id)
+    if not snapshot:
+        raise HTTPException(status_code=404, detail="Research snapshot not found")
+    return snapshot
+
+
+@api_router.get("/companies/{company_id}/research/history", response_model=list[IntelligenceSnapshotRead])
+async def company_research_history(
+    company_id: int,
+    session: AsyncSession = Depends(get_session),
+    limit: int = 10,
+):
+    return await get_research_history(session, company_id, limit=limit)
+
+
 @api_router.patch("/companies/{company_id}", response_model=CompanyRead)
 async def update_company(
     company_id: int,
@@ -575,6 +665,50 @@ async def update_company(
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
     return company
+
+
+@api_router.post("/research/jobs", response_model=list[ResearchJobRead])
+async def create_research_jobs(
+    payload: ResearchJobCreateRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    jobs = await create_research_jobs_for_companies(
+        session,
+        payload.company_ids,
+        job_type=payload.job_type,
+        priority=payload.priority,
+        max_attempts=payload.max_attempts,
+    )
+    return [serialize_job(job) for job in jobs]
+
+
+@api_router.get("/research/jobs", response_model=list[ResearchJobRead])
+async def list_research_jobs(
+    session: AsyncSession = Depends(get_session),
+    limit: int = 100,
+):
+    jobs = await get_research_jobs(session, limit=limit)
+    return [serialize_job(job) for job in jobs]
+
+
+@api_router.post("/research/jobs/run-batch", response_model=ResearchQueueStatusRead)
+async def run_research_jobs_batch(
+    payload: ResearchBatchRunRequest,
+):
+    await run_research_batch(
+        async_session_factory,
+        concurrency=payload.concurrency,
+        limit=payload.limit,
+    )
+    async with async_session_factory() as session:
+        return await get_queue_status(session)
+
+
+@api_router.get("/research/jobs/status", response_model=ResearchQueueStatusRead)
+async def research_jobs_status(
+    session: AsyncSession = Depends(get_session),
+):
+    return await get_queue_status(session)
 
 
 @api_router.delete("/companies/{company_id}", status_code=status.HTTP_204_NO_CONTENT)

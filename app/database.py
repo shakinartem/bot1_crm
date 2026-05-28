@@ -37,6 +37,7 @@ async def create_db_schema() -> None:
     from app.modules.enrichment.models import EnrichmentSnapshot  # noqa: F401
     from app.modules.intelligence.models import IntelligenceSnapshot  # noqa: F401
     from app.modules.proposals.models import ProposalDraft  # noqa: F401
+    from app.modules.research_queue.models import ResearchJob  # noqa: F401
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

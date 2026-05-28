@@ -661,3 +661,47 @@ http://bot1-crm:8000
 ```
 
 The MVP still uses SQLite. PostgreSQL and Redis can be introduced later for production orchestration.
+
+## FNS-first Discovery and Safe Browser Research
+
+This stage adds a legal-first pipeline:
+
+1. discover companies from a legal provider by niche and city;
+2. review a preview with duplicate and weak-data flags;
+3. import only after explicit confirmation;
+4. create queued research jobs for safe public-web enrichment.
+
+Included in MVP:
+
+- `legal_discovery` preview/import workflow
+- mock legal discovery provider for local development and smoke tests
+- `research_queue` with deduplicated `ResearchJob` records
+- safe `httpx` fetch backend for public HTML pages
+- disabled-by-default browser backend abstraction
+- website resolution by INN / legal name
+- site parsing for contacts, socials, messengers, and website signals
+- Telegram callbacks for discovery and research queue launch
+- API endpoints for discovery, queue control, and company research
+- CLI script: `scripts/run_research_batch.py`
+- smoke tests: `scripts/smoke_legal_discovery.py`, `scripts/smoke_research_queue.py`
+
+Key env variables:
+
+- `LEGAL_DISCOVERY_PROVIDER=mock`
+- `LEGAL_DISCOVERY_DEFAULT_LIMIT=50`
+- `LEGAL_DISCOVERY_REQUEST_TIMEOUT=10`
+- `RESEARCH_FETCH_BACKEND=httpx`
+- `RESEARCH_BROWSER_BACKEND=disabled`
+- `RESEARCH_CONCURRENCY=5`
+- `RESEARCH_REQUEST_TIMEOUT=10`
+- `RESEARCH_REQUEST_DELAY_MS=500`
+- `RESEARCH_MAX_PAGES_PER_SITE=3`
+- `RESEARCH_MAX_HTML_CHARS=300000`
+
+Safety and limitations:
+
+- no captcha, login, paywall, or anti-bot bypass
+- no aggressive crawling
+- no search-engine HTML scraping by hand
+- browser rendering is only an optional future abstraction
+- if a site is blocked or confidence is low, the result goes to manual review

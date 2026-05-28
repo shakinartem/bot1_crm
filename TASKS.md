@@ -113,3 +113,19 @@
 - Legal-data verification via ФНС.
 - Transcription via `faster-whisper` or `whisper.cpp`.
 - Telephony integration.
+- Legal discovery module
+- Mock legal discovery provider
+- Legal discovery preview/import
+- Research queue
+- Safe fetch/browser abstraction
+- Website resolver by INN/legal name
+- Site parser for contacts/socials/signals
+- Research Telegram workflow
+- Research API endpoints
+- Research batch CLI script
+- Research smoke checks
+- Real API-FNS/DaData credentials testing
+- Real Yandex/Google search provider testing
+- Optional Crawlee backend experiment
+- Optional Camoufox renderer experiment without bypass logic
+- Batch research scheduling

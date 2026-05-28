@@ -13,6 +13,7 @@ from app.modules.crm.constants import (
 )
 from app.modules.enrichment.schemas import Bot2EnrichmentContextRead
 from app.modules.intelligence.schemas import Bot2IntelligenceContextRead
+from app.modules.research.schemas import ResearchContextRead
 
 
 class CompanyBase(BaseModel):
@@ -251,3 +252,4 @@ class Bot2ConsultationContextRead(BaseModel):
     sales_summary: str
     enrichment: Bot2EnrichmentContextRead | None = None
     intelligence: Bot2IntelligenceContextRead | None = None
+    research: ResearchContextRead | None = None
