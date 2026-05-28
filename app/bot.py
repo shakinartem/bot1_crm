@@ -14,6 +14,7 @@ from app.modules.digest.scheduler import DigestScheduler
 from app.modules.enrichment.handlers import router as enrichment_router
 from app.modules.exports.handlers import router as exports_router
 from app.modules.imports.handlers import router as imports_router
+from app.modules.intelligence.handlers import router as intelligence_router
 from app.modules.proposals.handlers import router as proposals_router
 
 
@@ -32,6 +33,7 @@ async def main() -> None:
     dp = Dispatcher()
     dp.include_router(crm_router)
     dp.include_router(enrichment_router)
+    dp.include_router(intelligence_router)
     dp.include_router(analytics_router)
     dp.include_router(proposals_router)
     dp.include_router(digest_router)

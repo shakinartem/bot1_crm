@@ -24,6 +24,7 @@ from app.modules.crm.models import Company, FollowUpTask, LeadInteraction
 from app.modules.crm.schemas import InteractionCreate
 from app.modules.crm.service import add_interaction, get_company, humanize_company_status
 from app.modules.enrichment.service import build_enrichment_context_for_company
+from app.modules.intelligence.service import build_intelligence_context_for_company
 from app.modules.proposals.models import ProposalDraft
 from app.modules.proposals.packages import PACKAGE_ORDER, SERVICE_PACKAGES, ServicePackage
 from app.modules.proposals.prompts import build_commercial_proposal_prompt
@@ -76,6 +77,7 @@ async def suggest_packages_for_company(session: AsyncSession, company_id: int) -
     haystack = _build_analysis_text(company, ai_call_prep)
     suggestions: dict[str, PackageSuggestion] = {}
     enrichment = await build_enrichment_context_for_company(session, company_id)
+    intelligence = await build_intelligence_context_for_company(session, company_id)
 
     data_is_sparse = _is_sparse(company)
     if data_is_sparse:
@@ -116,6 +118,73 @@ async def suggest_packages_for_company(session: AsyncSession, company_id: int) -
                     "audit_roadmap",
                     "Research показывает риск потери пациента между сайтом и обращением, поэтому безопасный первый шаг — диагностическая карта воронки.",
                     "high",
+                ),
+            )
+
+    if intelligence:
+        if not (intelligence.parsed_signals.has_online_booking or intelligence.parsed_signals.has_callback_form):
+            suggestions.setdefault(
+                "landing_start",
+                _make_suggestion(
+                    "landing_start",
+                    "Intelligence не подтверждает явную онлайн-запись или форму, поэтому безопасный первый шаг — усилить точку входа и конверсию сайта.",
+                    "high",
+                ),
+            )
+            suggestions.setdefault(
+                "audit_roadmap",
+                _make_suggestion(
+                    "audit_roadmap",
+                    "INN-first intelligence показывает риск потери пациента до обращения, поэтому стоит начать с диагностического roadmap.",
+                    "high",
+                ),
+            )
+        if not intelligence.parsed_signals.has_reviews_section:
+            suggestions.setdefault(
+                "maps_reputation",
+                _make_suggestion(
+                    "maps_reputation",
+                    "На сайте не видно сильных review-сигналов, поэтому стоит усилить локальную репутацию и карты.",
+                    "medium",
+                ),
+            )
+        if not (
+            intelligence.parsed_socials.vk_links
+            or intelligence.parsed_socials.telegram_links
+            or intelligence.parsed_socials.instagram_links
+        ):
+            suggestions.setdefault(
+                "smm_funnel",
+                _make_suggestion(
+                    "smm_funnel",
+                    "Intelligence не нашел явных соцсетей, поэтому полезно проверить прогрев и контентную воронку вне сайта.",
+                    "medium",
+                ),
+            )
+        if intelligence.parsed_signals.has_implantation_keywords:
+            suggestions.setdefault(
+                "complex_growth",
+                _make_suggestion(
+                    "complex_growth",
+                    "На сайте есть сигналы имплантации, поэтому можно осторожно обсуждать комплексный рост вокруг дорогих услуг.",
+                    "medium",
+                ),
+            )
+            suggestions.setdefault(
+                "landing_start",
+                _make_suggestion(
+                    "landing_start",
+                    "Имплантация требует сильной упаковки доверия и записи, поэтому landing-first шаг выглядит безопасно.",
+                    "medium",
+                ),
+            )
+        if any("теряется" in item.lower() for item in intelligence.hypotheses):
+            suggestions.setdefault(
+                "crm_bot",
+                _make_suggestion(
+                    "crm_bot",
+                    "Intelligence дает гипотезу потери пациента в воронке, поэтому стоит рассмотреть CRM/follow-up автоматизацию.",
+                    "medium",
                 ),
             )
         if not enrichment.signals.has_reviews_section or not any(enrichment.detected_maps.values()):

@@ -39,6 +39,16 @@
 - Added enrichment API endpoints.
 - Integrated enrichment into AI call prep, proposals, scoring, and Bot 2 consultation context.
 - Added smoke_enrichment.py.
+- Added INN-first company intelligence pipeline.
+- Added legal lookup provider interface.
+- Added mock legal and search providers.
+- Added website resolver by INN/legal name.
+- Added site parser for contacts, socials, and website signals.
+- Added intelligence snapshots.
+- Added Telegram intelligence workflow.
+- Added intelligence API endpoints.
+- Integrated intelligence into call prep, proposals, scoring, and Bot 2 consultation context.
+- Added smoke_intelligence.py.
 - Added company export workflow in Telegram.
 - Added CSV export with CRM filters.
 - Added consultation package preview for company cards.

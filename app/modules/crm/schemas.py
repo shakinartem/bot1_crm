@@ -12,6 +12,7 @@ from app.modules.crm.constants import (
     TaskStatus,
 )
 from app.modules.enrichment.schemas import Bot2EnrichmentContextRead
+from app.modules.intelligence.schemas import Bot2IntelligenceContextRead
 
 
 class CompanyBase(BaseModel):
@@ -249,3 +250,4 @@ class Bot2ConsultationContextRead(BaseModel):
     recommended_next_step: str
     sales_summary: str
     enrichment: Bot2EnrichmentContextRead | None = None
+    intelligence: Bot2IntelligenceContextRead | None = None

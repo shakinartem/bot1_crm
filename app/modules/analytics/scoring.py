@@ -58,7 +58,7 @@ def calculate_lead_score(company_context: dict) -> LeadScoreRead:
         return _finalize(
             company_context,
             0,
-            reasons=["лид исключён из активной работы"],
+            reasons=["лид исключен из активной работы"],
             risks=["повторный контакт не рекомендуется"],
             next_best_action="Не трогать",
         )
@@ -93,6 +93,10 @@ def calculate_lead_score(company_context: dict) -> LeadScoreRead:
     else:
         risks.append("мало контекста по лиду")
 
+    if company_context.get("has_inn"):
+        score += 10
+        reasons.append("ИНН подтвержден")
+
     status_points = STATUS_SCORE_MAP.get(status, 0)
     if status_points:
         score += status_points
@@ -119,7 +123,7 @@ def calculate_lead_score(company_context: dict) -> LeadScoreRead:
         CompanyStatus.PROPOSAL_SENT.value,
     }:
         score += 15
-        reasons.append("просроченная задача по тёплому лиду")
+        reasons.append("просроченная задача по теплому лиду")
 
     if company_context["days_without_interaction"] is not None:
         days = company_context["days_without_interaction"]
@@ -159,7 +163,7 @@ def calculate_lead_score(company_context: dict) -> LeadScoreRead:
         enrichment_signals.get("has_online_booking") or enrichment_signals.get("has_callback_form")
     ):
         score -= 5
-        risks.append("не обнаружена явная запись или callback-форма")
+        risks.append("не обнаружена явная онлайн-запись или callback-форма")
 
     if any(enrichment_socials.values()):
         score += 5
@@ -183,6 +187,39 @@ def calculate_lead_score(company_context: dict) -> LeadScoreRead:
     ):
         score -= 5
         risks.append("на сайте мало доверительных сигналов")
+
+    intelligence_status = company_context.get("intelligence_status")
+    intelligence_legal_status = (company_context.get("intelligence_legal_status") or "").lower()
+    intelligence_website_confidence = float(company_context.get("intelligence_website_confidence") or 0)
+    intelligence_contacts = company_context.get("intelligence_contacts") or {}
+    intelligence_socials = company_context.get("intelligence_socials") or {}
+    intelligence_signals = company_context.get("intelligence_signals") or {}
+
+    if intelligence_status in {"success", "partial"}:
+        reasons.append("проведен INN-first intelligence")
+
+    if intelligence_website_confidence >= 70:
+        score += 10
+        reasons.append("сайт найден с высокой уверенностью")
+    elif intelligence_status in {"partial", "failed"} and not company_context["has_website"]:
+        score -= 10
+        risks.append("официальный сайт не найден")
+
+    if intelligence_contacts.get("phones") or intelligence_contacts.get("emails"):
+        score += 5
+        reasons.append("есть контакты с сайта")
+
+    if intelligence_legal_status in {"inactive", "liquidated", "closed"}:
+        score -= 10
+        risks.append("юрлицо неактивно или закрыто")
+
+    if any(intelligence_socials.values()):
+        reasons.append("intelligence нашел соцсети")
+
+    if intelligence_status == "success" and not (
+        intelligence_signals.get("has_online_booking") or intelligence_signals.get("has_callback_form")
+    ):
+        risks.append("intelligence не нашел явную онлайн-запись или форму")
 
     next_best_action = _next_best_action(company_context)
     return _finalize(company_context, score, reasons, risks, next_best_action)
@@ -215,7 +252,7 @@ def _next_best_action(company_context: dict) -> str:
     if (company_context["days_without_interaction"] or 0) > 14:
         return "Вернуться с мягким касанием"
     if not company_context["has_phone"] or not company_context["has_website"] or not company_context["has_decision_maker"]:
-        return "Ресёрч и обогащение карточки"
+        return "Ресерч и обогащение карточки"
     return "Открыть карточку и запланировать следующий шаг"
 
 

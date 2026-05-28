@@ -429,6 +429,74 @@ Limitations:
 - no guarantees or hard conclusions when data is limited
 - all findings are framed as cautious hypotheses for manager research
 
+## INN-first Company Intelligence
+
+Use the company card button `🧾 INN / Intelligence` to launch the legal-first enrichment pipeline.
+
+What it does:
+
+- starts from `ИНН`, or finds a likely legal entity by company name and city
+- enriches legal fields such as `legal_name`, `inn`, `ogrn`, address, status, and `okved`
+- resolves a likely official website through a pluggable search provider
+- fetches only the main page with lightweight `httpx`
+- extracts contacts, socials, maps links, and website signals
+- stores an `IntelligenceSnapshot` in CRM and reuses it in call prep, proposals, scoring, and Bot 2 context
+
+Providers:
+
+- legal lookup: `mock`, `api_fns`, `dadata`
+- search: `mock`, `yandex_search`, `google_search`
+
+Recommended env variables:
+
+```text
+LEGAL_PROVIDER=mock
+SEARCH_PROVIDER=mock
+API_FNS_KEY=
+API_FNS_BASE_URL=https://api-fns.ru/api
+DADATA_TOKEN=
+DADATA_SECRET=
+YANDEX_SEARCH_API_KEY=
+YANDEX_SEARCH_FOLDER_ID=
+GOOGLE_SEARCH_API_KEY=
+GOOGLE_SEARCH_ENGINE_ID=
+INTELLIGENCE_REQUEST_TIMEOUT=10
+INTELLIGENCE_SEARCH_LIMIT=10
+```
+
+Telegram workflow:
+
+- `🔎 Найти ИНН по названию`
+- `🧾 Проверить по ИНН`
+- `🌐 Найти сайт по ИНН`
+- `🌐 Найти сайт по юр. названию`
+- `🧠 Полное обогащение`
+- `📌 Последний результат`
+- `📜 История`
+
+API endpoints:
+
+- `POST /api/companies/{company_id}/intelligence/enrich`
+- `POST /api/companies/{company_id}/intelligence/find-legal`
+- `POST /api/companies/{company_id}/intelligence/resolve-website`
+- `GET /api/companies/{company_id}/intelligence/latest`
+- `GET /api/companies/{company_id}/intelligence/history`
+- `GET /api/companies/{company_id}/intelligence/{snapshot_id}`
+
+Smoke check:
+
+```bash
+python scripts/smoke_intelligence.py
+```
+
+Limitations:
+
+- no aggressive scraping
+- no Selenium or Playwright
+- real web search requires configured search APIs
+- official site matching is confidence-based and may still need manager review
+- a website may not publish INN directly
+
 ## Smoke Checks
 
 Basic repo smoke check:

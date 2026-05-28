@@ -10,6 +10,7 @@ from app.modules.ai.prompts import (
 from app.modules.ai.providers import get_ai_provider
 from app.modules.crm.service import get_company, get_company_last_interactions, humanize_company_status
 from app.modules.enrichment.service import build_enrichment_context_for_company
+from app.modules.intelligence.service import build_intelligence_context_for_company
 
 
 async def prepare_cold_call(session: AsyncSession, company_id: int) -> str | None:
@@ -17,7 +18,8 @@ async def prepare_cold_call(session: AsyncSession, company_id: int) -> str | Non
     if not company:
         return None
     enrichment = await build_enrichment_context_for_company(session, company_id)
-    prompt = build_cold_call_prompt(company, enrichment)
+    intelligence = await build_intelligence_context_for_company(session, company_id)
+    prompt = build_cold_call_prompt(company, enrichment, intelligence)
     return await get_ai_provider().generate(prompt)
 
 

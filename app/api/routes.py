@@ -56,6 +56,21 @@ from app.modules.enrichment.service import (
     get_enrichment_snapshot,
     get_latest_enrichment,
 )
+from app.modules.intelligence.schemas import (
+    CompanyIntelligenceResult,
+    IntelligenceRequest,
+    IntelligenceSnapshotRead,
+    LegalCompany,
+    WebsiteResolutionResult,
+)
+from app.modules.intelligence.service import (
+    enrich_company_intelligence,
+    find_legal_candidates_for_company,
+    get_intelligence_history,
+    get_intelligence_snapshot,
+    get_latest_intelligence,
+    resolve_company_website,
+)
 from app.modules.proposals.keyboards import package_catalog_payload
 from app.modules.proposals.schemas import (
     ContractActionRequest,
@@ -481,6 +496,72 @@ async def company_enrichment_snapshot(
     snapshot = await get_enrichment_snapshot(session, company_id, snapshot_id)
     if not snapshot:
         raise HTTPException(status_code=404, detail="Enrichment snapshot not found")
+    return snapshot
+
+
+@api_router.post("/companies/{company_id}/intelligence/enrich", response_model=CompanyIntelligenceResult)
+async def company_intelligence_enrich(
+    company_id: int,
+    payload: IntelligenceRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await enrich_company_intelligence(session, company_id, inn=payload.inn, use_ai=payload.use_ai)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@api_router.post("/companies/{company_id}/intelligence/find-legal", response_model=list[LegalCompany])
+async def company_intelligence_find_legal(
+    company_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await find_legal_candidates_for_company(session, company_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@api_router.post("/companies/{company_id}/intelligence/resolve-website", response_model=WebsiteResolutionResult)
+async def company_intelligence_resolve_website(
+    company_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await resolve_company_website(session, company_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@api_router.get("/companies/{company_id}/intelligence/latest", response_model=IntelligenceSnapshotRead)
+async def company_intelligence_latest(
+    company_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    snapshot = await get_latest_intelligence(session, company_id)
+    if not snapshot:
+        raise HTTPException(status_code=404, detail="Intelligence snapshot not found")
+    return snapshot
+
+
+@api_router.get("/companies/{company_id}/intelligence/history", response_model=list[IntelligenceSnapshotRead])
+async def company_intelligence_history(
+    company_id: int,
+    session: AsyncSession = Depends(get_session),
+    limit: int = 10,
+):
+    return await get_intelligence_history(session, company_id, limit=limit)
+
+
+@api_router.get("/companies/{company_id}/intelligence/{snapshot_id}", response_model=IntelligenceSnapshotRead)
+async def company_intelligence_snapshot(
+    company_id: int,
+    snapshot_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    snapshot = await get_intelligence_snapshot(session, company_id, snapshot_id)
+    if not snapshot:
+        raise HTTPException(status_code=404, detail="Intelligence snapshot not found")
     return snapshot
 
 

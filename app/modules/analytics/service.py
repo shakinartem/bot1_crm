@@ -350,6 +350,7 @@ async def _load_companies(session: AsyncSession, filters: AnalyticsFilters) -> l
             selectinload(Company.interactions),
             selectinload(Company.tasks),
             selectinload(Company.enrichment_snapshots),
+            selectinload(Company.intelligence_snapshots),
         )
         .order_by(Company.created_at.desc())
     )
@@ -376,6 +377,7 @@ async def _load_company(session: AsyncSession, company_id: int) -> Company | Non
             selectinload(Company.interactions),
             selectinload(Company.tasks),
             selectinload(Company.enrichment_snapshots),
+            selectinload(Company.intelligence_snapshots),
         )
     )
     return result.scalar_one_or_none()
@@ -386,6 +388,7 @@ def _company_context(company: Company) -> dict:
     interactions = sorted(company.interactions, key=lambda item: item.created_at or datetime.min, reverse=True)
     tasks = [task for task in company.tasks if task.status == TaskStatus.OPEN.value]
     latest_enrichment = _latest_enrichment_snapshot(company)
+    latest_intelligence = _latest_intelligence_snapshot(company)
     last_interaction = interactions[0] if interactions else None
     days_without_interaction = None
     if last_interaction and last_interaction.created_at:
@@ -415,6 +418,13 @@ def _company_context(company: Company) -> dict:
         "enrichment_socials": _snapshot_json_dict(latest_enrichment.detected_socials_json if latest_enrichment else None),
         "enrichment_maps": _snapshot_json_dict(latest_enrichment.detected_maps_json if latest_enrichment else None),
         "enrichment_contacts": _snapshot_json_dict(latest_enrichment.detected_contacts_json if latest_enrichment else None),
+        "has_inn": bool((company.inn or "").strip()),
+        "intelligence_status": latest_intelligence.status if latest_intelligence else None,
+        "intelligence_legal_status": latest_intelligence.legal_status if latest_intelligence else None,
+        "intelligence_website_confidence": latest_intelligence.website_confidence if latest_intelligence else None,
+        "intelligence_contacts": _snapshot_json_dict(latest_intelligence.parsed_contacts_json if latest_intelligence else None),
+        "intelligence_socials": _snapshot_json_dict(latest_intelligence.parsed_socials_json if latest_intelligence else None),
+        "intelligence_signals": _snapshot_json_dict(latest_intelligence.parsed_signals_json if latest_intelligence else None),
     }
 
 
@@ -523,6 +533,13 @@ def _analytics_exports_dir() -> Path:
 
 def _latest_enrichment_snapshot(company: Company):
     snapshots = getattr(company, "enrichment_snapshots", None) or []
+    if not snapshots:
+        return None
+    return max(snapshots, key=lambda item: ((item.created_at or datetime.min), item.id))
+
+
+def _latest_intelligence_snapshot(company: Company):
+    snapshots = getattr(company, "intelligence_snapshots", None) or []
     if not snapshots:
         return None
     return max(snapshots, key=lambda item: ((item.created_at or datetime.min), item.id))

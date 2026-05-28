@@ -75,7 +75,10 @@ def company_actions(company_id: int) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="📜 История", callback_data=f"company:history:{company_id}:0"),
                 InlineKeyboardButton(text="🤖 AI-подготовка", callback_data=f"company:ai:{company_id}"),
             ],
-            [InlineKeyboardButton(text="🔎 Research", callback_data=f"research:open:{company_id}")],
+            [
+                InlineKeyboardButton(text="🔎 Research", callback_data=f"research:open:{company_id}"),
+                InlineKeyboardButton(text="🧾 INN / Intelligence", callback_data=f"intelligence:open:{company_id}"),
+            ],
             [
                 InlineKeyboardButton(text="📦 Пакет консультации", callback_data=f"consult:package:{company_id}"),
                 InlineKeyboardButton(text="📄 КП / Договор", callback_data=f"proposal:open:{company_id}"),

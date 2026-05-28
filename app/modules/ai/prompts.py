@@ -2,9 +2,14 @@ from __future__ import annotations
 
 from app.modules.crm.models import Company
 from app.modules.enrichment.schemas import Bot2EnrichmentContextRead
+from app.modules.intelligence.schemas import Bot2IntelligenceContextRead
 
 
-def build_cold_call_prompt(company: Company, enrichment: Bot2EnrichmentContextRead | None = None) -> str:
+def build_cold_call_prompt(
+    company: Company,
+    enrichment: Bot2EnrichmentContextRead | None = None,
+    intelligence: Bot2IntelligenceContextRead | None = None,
+) -> str:
     decision_makers = "\n".join(
         f"- {dm.full_name}, {dm.role or 'роль не указана'}, телефон: {dm.phone or 'нет'}, Telegram: {dm.telegram or 'нет'}"
         for dm in company.decision_makers
@@ -31,6 +36,34 @@ def build_cold_call_prompt(company: Company, enrichment: Bot2EnrichmentContextRe
             f"- Карты/площадки: {map_names}\n"
             f"- AI-резюме: {enrichment.ai_summary or 'нет'}\n"
             f"- Гипотезы:\n{hypothesis_lines}"
+        )
+
+    intelligence_block = "INN-first intelligence пока не проводился."
+    if intelligence:
+        social_bits = []
+        if intelligence.parsed_socials.vk_links:
+            social_bits.append("VK")
+        if intelligence.parsed_socials.telegram_links:
+            social_bits.append("Telegram")
+        if intelligence.parsed_socials.instagram_links:
+            social_bits.append("Instagram")
+        intelligence_block = (
+            f"- Статус intelligence: {intelligence.status or 'нет'}\n"
+            f"- ИНН: {intelligence.inn or company.inn or 'не указан'}\n"
+            f"- Юрлицо: {intelligence.legal_name or company.legal_name or 'не указано'}\n"
+            f"- ОГРН: {intelligence.ogrn or 'не указан'}\n"
+            f"- Адрес: {intelligence.legal_address or company.address or 'не указан'}\n"
+            f"- Сайт: {intelligence.website_url or company.website or 'не найден'}\n"
+            f"- Confidence сайта: {intelligence.website_confidence or 0:.0f}\n"
+            f"- Контакты с сайта: телефоны {', '.join(intelligence.parsed_contacts.phones[:3]) or 'не найдены'}; "
+            f"email {', '.join(intelligence.parsed_contacts.emails[:3]) or 'не найдены'}\n"
+            f"- Соцсети: {', '.join(social_bits) or 'не найдены'}\n"
+            f"- Сигналы: запись {'да' if intelligence.parsed_signals.has_online_booking else 'нет'}, "
+            f"форма {'да' if intelligence.parsed_signals.has_callback_form else 'нет'}, "
+            f"отзывы {'да' if intelligence.parsed_signals.has_reviews_section else 'нет'}, "
+            f"врачи {'да' if intelligence.parsed_signals.has_doctors_page else 'нет'}\n"
+            f"- AI-резюме: {intelligence.ai_summary or 'нет'}\n"
+            f"- Гипотезы:\n" + ("\n".join(f"- {item}" for item in intelligence.hypotheses[:5]) or "- нет")
         )
 
     return f"""
@@ -66,6 +99,9 @@ TASK: COLD_CALL_PREP
 Research сайта / digital-присутствия:
 {enrichment_block}
 
+INN-first intelligence:
+{intelligence_block}
+
 Формула продаж:
 1. ФВ — финансовая возможность.
 2. ОП — осознанная потребность.
@@ -88,7 +124,7 @@ Research сайта / digital-присутствия:
 9. Короткий текст сообщения после звонка.
 10. Следующее действие.
 
-Пиши по-русски, практично, без воды. Не выдумывай факты, если данных нет: помечай их как гипотезы. Учитывай research сайта при вопросах о форме записи, доверии, мессенджерах, отзывах и картах.
+Пиши по-русски, практично, без воды. Не выдумывай факты, если данных нет: помечай их как гипотезы. Учитывай и website research, и intelligence при вопросах о записи, доверии, юрданных, контактах, мессенджерах, отзывах и пути пациента до записи.
 """.strip()
 
 

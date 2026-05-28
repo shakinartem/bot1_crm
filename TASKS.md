@@ -6,7 +6,10 @@
 - [ ] Real document templates with реквизиты
 - [ ] Real Bot 2 push integration
 - [ ] Advanced conversion attribution
-- [ ] External maps/reviews enrichment, if needed
+- [ ] External maps/reviews enrichment
+- [ ] Batch intelligence enrichment
+- [ ] Real FNS/DaData credentials testing
+- [ ] Real Yandex/Google search provider testing
 
 ## Backlog
 
@@ -79,6 +82,17 @@
 - Enrichment integration with scoring
 - Enrichment Bot2 context block
 - Enrichment smoke check
+- INN-first intelligence pipeline
+- Legal lookup provider interface
+- Mock legal provider
+- Search provider interface
+- Mock search provider
+- Website resolver by INN and legal name
+- Site parser for contacts/socials/signals
+- Intelligence Telegram workflow
+- Intelligence API endpoints
+- Intelligence smoke check
+- Intelligence integration with call prep/proposals/scoring/Bot2 context
 - Bot 2 handoff API via `/api/bot2/*`
 - Bot 2 consultation result -> CRM status / interaction / follow-up task mapping
 - `GET /api/companies` filters by status/city/priority
