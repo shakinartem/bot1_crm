@@ -26,6 +26,7 @@ from app.modules.crm.schemas import CompanyCreate  # noqa: E402
 from app.modules.crm.service import create_company  # noqa: E402
 from app.modules.enrichment.models import EnrichmentSnapshot  # noqa: E402
 from app.modules.enrichment.schemas import dump_json_text  # noqa: E402
+from app.modules.insights.service import get_latest_company_insight  # noqa: E402
 from app.modules.intelligence.models import IntelligenceSnapshot  # noqa: E402
 from app.modules.research_queue.models import ResearchJob  # noqa: E402
 from app.modules.sales_intelligence.service import (  # noqa: E402
@@ -268,10 +269,26 @@ async def verify_sales_intelligence(company_id: int) -> None:
         assert plan.copyable_short_script, "copyable short script must exist"
         assert len(plan.copyable_short_script) <= 1000, "manager script must stay concise"
 
+        saved_snapshot = await get_latest_company_insight(session, company_id, "sales_intelligence")
+        assert saved_snapshot is not None, "cold-call generation must persist a company insight snapshot"
+        assert saved_snapshot.source == "sales_intelligence"
+
         latest = await get_latest_sales_intelligence(session, company_id)
-        assert latest.saved_at is None, "Task 3 should not persist snapshots"
-        assert latest.cold_call_plan is None, "latest read should assemble on demand only for now"
+        assert latest.saved_at is not None, "latest read must use saved company insight snapshot when available"
+        assert latest.cold_call_plan is not None, "latest read must return saved cold call plan when available"
         assert latest.closing_criteria.next_best_question
+
+        refreshed_context = await get_company_sales_context(session, company_id)
+        latest_note = max(
+            (
+                item
+                for item in refreshed_context["recent_interactions"]
+                if item.get("type") == "note"
+            ),
+            key=lambda item: item.get("created_at") or "",
+        )
+        assert "1. Open gently:" not in (latest_note.get("summary") or "")
+        assert "copyable_short_script" not in (latest_note.get("summary") or "")
 
     with TestClient(app) as client:
         material_response = client.get(f"/api/companies/{company_id}/sales-intelligence/material-score")
@@ -297,8 +314,15 @@ async def verify_sales_intelligence(company_id: int) -> None:
         assert latest_response.status_code == 200
         latest_payload = latest_response.json()
         assert latest_payload["material_score"]["total_score"] >= 0
-        assert latest_payload["saved_at"] is None
-        assert latest_payload["cold_call_plan"] is None
+        assert latest_payload["saved_at"] is not None
+        assert latest_payload["cold_call_plan"] is not None
+
+        insights_response = client.get(
+            f"/api/companies/{company_id}/insights/latest",
+            params={"insight_type": "sales_intelligence"},
+        )
+        assert insights_response.status_code == 200
+        assert insights_response.json()["source"] == "sales_intelligence"
 
         bot2_response = client.get(f"/api/bot2/companies/{company_id}/consultation-context")
         assert bot2_response.status_code == 200

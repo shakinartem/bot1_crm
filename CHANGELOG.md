@@ -8,6 +8,12 @@
 - Added Bot 2 sales intelligence context block and on-demand fallback cold-call-plan summary.
 - Integrated sales intelligence into analytics lead scoring and proposal package suggestions.
 - Added `scripts/smoke_material_scoring.py` and `scripts/smoke_call_plan.py`.
+- Normalized generated source formatting in the targeted sales-intelligence, discovery, research, and smoke-script files touched in this stage.
+- Added `CompanyInsightSnapshot` as a universal company insight storage layer.
+- Added company insights service helpers and read-only API endpoints.
+- Persisted sales intelligence payloads through `CompanyInsightSnapshot`.
+- Kept on-demand fallback for missing or invalid saved sales-intelligence payloads.
+- Added `scripts/smoke_company_insights.py`.
 - Tightened smoke coverage so `sales-intelligence/latest` explicitly stays on-demand with `saved_at=null`, and Bot 2 context proves fallback sales-intelligence payload delivery.
 - Kept sales intelligence persistence in on-demand mode because the current `IntelligenceSnapshot` model does not yet expose dedicated JSON fields for safe snapshot merge.
 - Added Checko HTML MVP legal discovery flow with OKVED-first preview/import support.

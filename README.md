@@ -12,10 +12,10 @@ The current MVP also includes a dedicated `sales_intelligence` layer for:
 
 Storage note for the current MVP:
 
-- `sales-intelligence/latest` is assembled on demand from CRM, enrichment, intelligence, and research context.
-- `saved_at` stays `null` because `IntelligenceSnapshot` does not yet expose a safe dedicated JSON/text field for this payload.
-- No dedicated sales-intelligence snapshot table was added.
-- No migration was added for sales-intelligence persistence in this stage.
+- `CompanyInsightSnapshot` is the universal company-insight storage layer for structured research, sales, and future Bot 2 payloads.
+- Snapshot payloads are stored as SQLite-compatible JSON text via `json.dumps` / `json.loads`.
+- `sales-intelligence/latest` reads the latest saved `sales_intelligence` insight first.
+- If the saved payload is missing or invalid, `sales-intelligence/latest` falls back to on-demand assembly from CRM, enrichment, intelligence, and research context.
 
 Current MVP discovery defaults:
 
@@ -143,6 +143,9 @@ CRM:
 - `GET /api/companies/{id}/sales-intelligence/soprano-questions`
 - `POST /api/companies/{id}/sales-intelligence/cold-call-plan`
 - `GET /api/companies/{id}/sales-intelligence/latest`
+- `GET /api/companies/{id}/insights`
+- `GET /api/companies/{id}/insights/latest`
+- `GET /api/companies/{id}/insights/{insight_id}`
 
 `GET /api/companies` supports optional filters:
 
@@ -155,6 +158,53 @@ CRM:
 Example:
 
 - `GET /api/companies?status=consultation_planned&city=Саратов&priority=high&limit=20`
+
+## Company Insights
+
+`CompanyInsightSnapshot` is a universal storage layer for structured company-level insights. It is intentionally broader than sales intelligence and is designed to support:
+
+- sales intelligence payloads
+- website research
+- legal / Checko discovery summaries
+- social or maps audit payloads
+- Bot 2 consultation summaries
+- future proposal context and dashboard reads
+
+Each snapshot stores:
+
+- company id and `insight_type`
+- optional title and summary
+- status such as `success`, `partial`, `failed`, or `on_demand`
+- `payload_json` stored as SQLite-safe text
+- optional source and version
+- created and updated timestamps
+
+Read-only company insights endpoints:
+
+- `GET /api/companies/{id}/insights?insight_type=sales_intelligence&limit=20`
+- `GET /api/companies/{id}/insights/latest?insight_type=sales_intelligence`
+- `GET /api/companies/{id}/insights/{insight_id}`
+
+The MVP does not expose a public create endpoint. Snapshots are created internally by services.
+
+## Sales Intelligence
+
+The sales intelligence layer still supports the existing on-demand flow, but it now persists successful cold-call-plan generations into `CompanyInsightSnapshot`.
+
+What happens now:
+
+- `POST /api/companies/{id}/sales-intelligence/cold-call-plan` generates the payload and stores a `sales_intelligence` insight snapshot.
+- `GET /api/companies/{id}/sales-intelligence/latest` tries to reuse the latest saved snapshot first.
+- If the snapshot is absent or its payload is invalid, the API falls back to on-demand assembly and returns `saved_at = null`.
+- Bot 2 consultation context follows the same rule: saved snapshot first, on-demand fallback second.
+
+The stored `sales_intelligence` payload currently includes:
+
+- `material_score`
+- `closing_criteria`
+- `soprano_questions`
+- `cold_call_plan`
+- `saved_at`
 
 ## Bot 2 handoff API
 

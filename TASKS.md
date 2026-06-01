@@ -2,17 +2,18 @@
 
 ## Current Sprint
 
-- [ ] Safe snapshot persistence for `sales_intelligence` once `IntelligenceSnapshot` gets dedicated JSON fields or an approved migration path
-  Current MVP stays on-demand only: no new sales-intelligence table, no migration, no merge into unsuitable snapshot fields.
 - [ ] Manager roles and multi-user CRM
-- [ ] Real document templates with реквизиты
+- [ ] Real document templates with СЂРµРєРІРёР·РёС‚С‹
 - [ ] Real Bot 2 push integration
 - [ ] Advanced conversion attribution
 - [ ] External maps/reviews enrichment
 - [ ] Batch intelligence enrichment
-- [ ] Real API-FNS credentials testing
-- [ ] Manual live Checko HTML validation
-- [ ] Manual live Yandex Search validation
+- [ ] Live Checko selector tuning
+- [ ] Live Yandex Search testing
+- [ ] Camoufox installation guide
+- [ ] Research queue scaling
+- [ ] Unified app/dashboard planning
+- [ ] Social/maps audit deepening
 
 ## Backlog
 
@@ -79,6 +80,12 @@
 - Sales intelligence Bot 2 context block
 - Sales intelligence cold-call-plan smoke check
 - Sales intelligence integration with analytics and proposals
+- Source formatting normalization
+- CompanyInsightSnapshot model
+- Company insights service
+- Company insights API endpoints
+- Sales intelligence persistence through CompanyInsightSnapshot
+- Company insights smoke test
 - Website research enrichment
 - Enrichment snapshots
 - Social/contact/map detection
@@ -119,7 +126,7 @@
 ## Future Integrations
 
 - Bot 2 Consultation AI handoff via real API/events/export.
-- Legal-data verification via ФНС.
+- Legal-data verification via Р¤РќРЎ.
 - Transcription via `faster-whisper` or `whisper.cpp`.
 - Telephony integration.
 - Legal discovery module

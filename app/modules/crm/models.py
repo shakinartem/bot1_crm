@@ -71,6 +71,10 @@ class Company(Base):
         back_populates="company",
         cascade="all, delete-orphan",
     )
+    insight_snapshots: Mapped[list["CompanyInsightSnapshot"]] = relationship(
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
     research_jobs: Mapped[list["ResearchJob"]] = relationship(
         back_populates="company",
         cascade="all, delete-orphan",
@@ -162,6 +166,28 @@ class FollowUpTask(Base):
 
 
 Task = FollowUpTask
+
+
+class CompanyInsightSnapshot(Base):
+    __tablename__ = "company_insight_snapshots"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True)
+    insight_type: Mapped[str] = mapped_column(String(64), index=True)
+    title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), index=True)
+    payload_json: Mapped[str] = mapped_column(Text)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    company: Mapped[Company] = relationship(back_populates="insight_snapshots")
 
 
 from app.modules.calls.models import CallRecord  # noqa: E402,F401

@@ -49,6 +49,13 @@ from app.modules.digest.service import (
 )
 from app.modules.exports.service import ExportFilters, export_companies_to_csv
 from app.modules.imports.service import import_companies_from_csv, preview_companies_from_csv, save_import_file
+from app.modules.insights.schemas import CompanyInsightSnapshotRead
+from app.modules.insights.service import (
+    get_company_insight,
+    get_company_insight_history,
+    get_latest_company_insight,
+    serialize_company_insight_snapshot,
+)
 from app.modules.enrichment.schemas import EnrichmentRequest, EnrichmentResultRead, EnrichmentSnapshotRead
 from app.modules.enrichment.service import (
     enrich_company_website,
@@ -314,6 +321,52 @@ async def sales_intelligence_latest(
         return await get_latest_sales_intelligence(session, company_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@api_router.get("/companies/{company_id}/insights", response_model=list[CompanyInsightSnapshotRead])
+async def company_insights_history(
+    company_id: int,
+    session: AsyncSession = Depends(get_session),
+    insight_type: str | None = None,
+    limit: int = 20,
+):
+    company = await crm_service.get_company(session, company_id)
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+    snapshots = await get_company_insight_history(
+        session,
+        company_id,
+        insight_type=insight_type,
+        limit=limit,
+    )
+    return [serialize_company_insight_snapshot(snapshot) for snapshot in snapshots]
+
+
+@api_router.get("/companies/{company_id}/insights/latest", response_model=CompanyInsightSnapshotRead)
+async def company_insights_latest(
+    company_id: int,
+    insight_type: str,
+    session: AsyncSession = Depends(get_session),
+):
+    company = await crm_service.get_company(session, company_id)
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+    snapshot = await get_latest_company_insight(session, company_id, insight_type)
+    if not snapshot:
+        raise HTTPException(status_code=404, detail="Company insight snapshot not found")
+    return serialize_company_insight_snapshot(snapshot)
+
+
+@api_router.get("/companies/{company_id}/insights/{insight_id}", response_model=CompanyInsightSnapshotRead)
+async def company_insight_detail(
+    company_id: int,
+    insight_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    snapshot = await get_company_insight(session, company_id, insight_id)
+    if not snapshot:
+        raise HTTPException(status_code=404, detail="Company insight snapshot not found")
+    return serialize_company_insight_snapshot(snapshot)
 
 
 @api_router.get("/digest/daily", response_model=DailyDigestRead)

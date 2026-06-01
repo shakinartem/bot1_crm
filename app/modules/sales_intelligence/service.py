@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, ValidationError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -14,6 +15,8 @@ from app.modules.crm.models import Company, ContactPoint, DecisionMaker, FollowU
 from app.modules.crm.service import get_company, humanize_company_status
 from app.modules.enrichment.schemas import parse_json_text
 from app.modules.enrichment.service import build_enrichment_context_for_company, get_latest_enrichment
+from app.modules.insights.schemas import CompanyInsightSnapshotCreate
+from app.modules.insights.service import create_company_insight_snapshot, get_latest_company_insight, safe_load_payload
 from app.modules.intelligence.service import build_intelligence_context_for_company, get_latest_intelligence
 from app.modules.research.service import get_latest_research
 from app.modules.sales_intelligence.prompts import build_cold_call_plan_prompt
@@ -46,6 +49,9 @@ _DENTAL_KEYWORDS = (
     "clinic",
     "dentistry",
 )
+_SALES_INSIGHT_TYPE = "sales_intelligence"
+_SALES_INSIGHT_TITLE = "Sales intelligence / cold call plan"
+_SALES_INSIGHT_SOURCE = "sales_intelligence"
 
 
 async def get_company_sales_context(session: AsyncSession, company_id: int) -> dict[str, Any]:
@@ -146,13 +152,15 @@ async def generate_cold_call_plan(
     use_ai: bool = True,
     force_regenerate: bool = False,
     niche: str | None = None,
+    persist: bool = True,
 ) -> ColdCallPlan:
     del force_regenerate
 
-    company_context = await get_company_sales_context(session, company_id)
-    material_score = _calculate_material_score_from_context(company_context)
-    closing_criteria = _build_closing_criteria_from_context(company_context, material_score)
-    soprano_questions = _build_soprano_questions_from_context(company_context, niche=niche)
+    company_context, material_score, closing_criteria, soprano_questions = await _build_sales_intelligence_components(
+        session,
+        company_id,
+        niche=niche,
+    )
     fallback_plan = build_fallback_cold_call_plan(
         company_context,
         material_score,
@@ -161,6 +169,15 @@ async def generate_cold_call_plan(
     )
 
     if not use_ai or get_settings().ai_provider.lower() == "fallback":
+        if persist:
+            await _persist_sales_intelligence_snapshot(
+                session,
+                company_id,
+                material_score,
+                closing_criteria,
+                soprano_questions,
+                fallback_plan,
+            )
         return fallback_plan
 
     prompt = build_cold_call_plan_prompt(
@@ -172,10 +189,29 @@ async def generate_cold_call_plan(
     try:
         raw_response = await get_ai_provider().generate(prompt)
     except Exception:
+        if persist:
+            await _persist_sales_intelligence_snapshot(
+                session,
+                company_id,
+                material_score,
+                closing_criteria,
+                soprano_questions,
+                fallback_plan,
+            )
         return fallback_plan
 
     ai_plan = _parse_ai_cold_call_plan(raw_response, fallback_plan)
-    return ai_plan or fallback_plan
+    final_plan = ai_plan or fallback_plan
+    if persist:
+        await _persist_sales_intelligence_snapshot(
+            session,
+            company_id,
+            material_score,
+            closing_criteria,
+            soprano_questions,
+            final_plan,
+        )
+    return final_plan
 
 
 def build_fallback_cold_call_plan(
@@ -268,10 +304,24 @@ async def get_latest_sales_intelligence(
     session: AsyncSession,
     company_id: int,
 ) -> LatestSalesIntelligenceRead:
-    company_context = await get_company_sales_context(session, company_id)
-    material_score = _calculate_material_score_from_context(company_context)
-    closing_criteria = _build_closing_criteria_from_context(company_context, material_score)
-    soprano_questions = _build_soprano_questions_from_context(company_context, niche=None)
+    snapshot = await get_latest_company_insight(session, company_id, _SALES_INSIGHT_TYPE)
+    latest = _build_latest_sales_intelligence_from_snapshot(snapshot)
+    if latest is not None:
+        return latest
+    return await _build_latest_sales_intelligence_on_demand(session, company_id)
+
+
+async def _build_latest_sales_intelligence_on_demand(
+    session: AsyncSession,
+    company_id: int,
+    *,
+    niche: str | None = None,
+) -> LatestSalesIntelligenceRead:
+    _, material_score, closing_criteria, soprano_questions = await _build_sales_intelligence_components(
+        session,
+        company_id,
+        niche=niche,
+    )
     return LatestSalesIntelligenceRead(
         material_score=material_score,
         closing_criteria=closing_criteria,
@@ -279,6 +329,134 @@ async def get_latest_sales_intelligence(
         cold_call_plan=None,
         saved_at=None,
     )
+
+
+async def _build_sales_intelligence_components(
+    session: AsyncSession,
+    company_id: int,
+    *,
+    niche: str | None,
+) -> tuple[dict[str, Any], SalesMaterialScore, ClosingCriteriaReadiness, SopranoQuestionSet]:
+    company_context = await get_company_sales_context(session, company_id)
+    material_score = _calculate_material_score_from_context(company_context)
+    closing_criteria = _build_closing_criteria_from_context(company_context, material_score)
+    soprano_questions = _build_soprano_questions_from_context(company_context, niche=niche)
+    return company_context, material_score, closing_criteria, soprano_questions
+
+
+def _build_latest_sales_intelligence_from_snapshot(snapshot: Any) -> LatestSalesIntelligenceRead | None:
+    payload = safe_load_payload(snapshot)
+    if payload is None:
+        return None
+
+    try:
+        material_score = SalesMaterialScore.model_validate(payload.get("material_score") or {})
+        closing_criteria = ClosingCriteriaReadiness.model_validate(payload.get("closing_criteria") or {})
+        soprano_questions = SopranoQuestionSet.model_validate(payload.get("soprano_questions") or {})
+    except ValidationError:
+        return None
+
+    cold_call_plan_payload = payload.get("cold_call_plan")
+    cold_call_plan: ColdCallPlan | None = None
+    if cold_call_plan_payload is not None:
+        try:
+            cold_call_plan = ColdCallPlan.model_validate(cold_call_plan_payload)
+        except ValidationError:
+            return None
+
+    saved_at = _parse_snapshot_saved_at(payload.get("saved_at"), fallback=snapshot.created_at)
+    return LatestSalesIntelligenceRead(
+        material_score=material_score,
+        closing_criteria=closing_criteria,
+        soprano_questions=soprano_questions,
+        cold_call_plan=cold_call_plan,
+        saved_at=saved_at,
+    )
+
+
+def _parse_snapshot_saved_at(value: Any, *, fallback: datetime | None) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value)
+        except ValueError:
+            return fallback
+    return fallback
+
+
+async def _persist_sales_intelligence_snapshot(
+    session: AsyncSession,
+    company_id: int,
+    material_score: SalesMaterialScore,
+    closing_criteria: ClosingCriteriaReadiness,
+    soprano_questions: SopranoQuestionSet,
+    cold_call_plan: ColdCallPlan,
+) -> None:
+    saved_at = datetime.utcnow()
+    summary = (
+        f"Material score: {material_score.total_score}/100 ({material_score.grade}). "
+        f"First offer: {cold_call_plan.first_offer}. "
+        f"Mode: {cold_call_plan.generation_mode}."
+    )
+    payload = {
+        "material_score": material_score.model_dump(mode="json"),
+        "closing_criteria": closing_criteria.model_dump(mode="json"),
+        "soprano_questions": soprano_questions.model_dump(mode="json"),
+        "cold_call_plan": cold_call_plan.model_dump(mode="json"),
+        "saved_at": saved_at.isoformat(),
+    }
+    try:
+        await create_company_insight_snapshot(
+            session,
+            CompanyInsightSnapshotCreate(
+                company_id=company_id,
+                insight_type=_SALES_INSIGHT_TYPE,
+                title=_SALES_INSIGHT_TITLE,
+                status="success",
+                payload=payload,
+                summary=summary,
+                source=_SALES_INSIGHT_SOURCE,
+                version="v1",
+            ),
+        )
+        await _save_sales_intelligence_note(session, company_id, summary)
+    except Exception:
+        await session.rollback()
+        return None
+
+
+async def _save_sales_intelligence_note(
+    session: AsyncSession,
+    company_id: int,
+    summary: str,
+) -> None:
+    note_text = f"Cold call plan saved. {summary}"
+    latest_note = await session.scalar(
+        select(LeadInteraction)
+        .where(
+            LeadInteraction.company_id == company_id,
+            LeadInteraction.type == "note",
+            LeadInteraction.created_by == _SALES_INSIGHT_SOURCE,
+        )
+        .order_by(LeadInteraction.created_at.desc(), LeadInteraction.id.desc())
+        .limit(1)
+    )
+    if latest_note and (latest_note.summary or "").strip() == note_text:
+        return
+
+    session.add(
+        LeadInteraction(
+            company_id=company_id,
+            type="note",
+            summary=note_text,
+            created_by=_SALES_INSIGHT_SOURCE,
+        )
+    )
+    try:
+        await session.commit()
+    except Exception:
+        await session.rollback()
 
 
 def _calculate_material_score_from_context(company_context: dict[str, Any]) -> SalesMaterialScore:

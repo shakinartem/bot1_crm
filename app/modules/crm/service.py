@@ -157,6 +157,7 @@ async def get_company(session: AsyncSession, company_id: int) -> Company | None:
             selectinload(Company.calls),
             selectinload(Company.enrichment_snapshots),
             selectinload(Company.intelligence_snapshots),
+            selectinload(Company.insight_snapshots),
             selectinload(Company.research_jobs),
         )
     )
@@ -760,7 +761,14 @@ async def build_bot2_consultation_context(
     )
 
     latest_sales_intelligence = await get_latest_sales_intelligence(session, company_id)
-    cold_call_plan = await generate_cold_call_plan(session, company_id, use_ai=False)
+    cold_call_plan = latest_sales_intelligence.cold_call_plan
+    if cold_call_plan is None:
+        cold_call_plan = await generate_cold_call_plan(
+            session,
+            company_id,
+            use_ai=False,
+            persist=False,
+        )
     sales_intelligence = Bot2SalesIntelligenceContext(
         material_score=latest_sales_intelligence.material_score.model_dump(mode="json"),
         closing_criteria=latest_sales_intelligence.closing_criteria.model_dump(mode="json"),
