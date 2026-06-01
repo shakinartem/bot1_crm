@@ -4,7 +4,6 @@ from app.config import get_settings
 from app.modules.intelligence.providers.api_fns import ApiFnsLegalProvider
 from app.modules.intelligence.providers.base import LegalLookupProvider, WebSearchProvider
 from app.modules.intelligence.providers.dadata import DaDataLegalProvider
-from app.modules.intelligence.providers.google_search import GoogleSearchProvider
 from app.modules.intelligence.providers.mock_legal import MockLegalProvider
 from app.modules.intelligence.providers.mock_search import MockSearchProvider
 from app.modules.intelligence.providers.yandex_search import YandexSearchProvider
@@ -29,8 +28,8 @@ def get_search_provider() -> WebSearchProvider:
         "mock": MockSearchProvider(),
         "yandex": YandexSearchProvider(),
         "yandex_search": YandexSearchProvider(),
-        "google": GoogleSearchProvider(),
-        "google_search": GoogleSearchProvider(),
+        "google": MockSearchProvider(),
+        "google_search": MockSearchProvider(),
     }
     provider = providers.get(settings.search_provider.lower(), MockSearchProvider())
     if not provider.enabled:

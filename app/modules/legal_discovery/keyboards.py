@@ -6,9 +6,8 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 def discovery_provider_markup() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
+            [InlineKeyboardButton(text="Checko HTML", callback_data="discovery:provider:checko_html")],
             [InlineKeyboardButton(text="Mock / Dev", callback_data="discovery:provider:mock")],
-            [InlineKeyboardButton(text="ФНС / API-ФНС", callback_data="discovery:provider:api_fns")],
-            [InlineKeyboardButton(text="DaData", callback_data="discovery:provider:dadata")],
         ]
     )
 
@@ -16,10 +15,10 @@ def discovery_provider_markup() -> InlineKeyboardMarkup:
 def discovery_niche_markup() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="стоматология", callback_data="discovery:niche:стоматология")],
-            [InlineKeyboardButton(text="стоматологическая клиника", callback_data="discovery:niche:стоматологическая клиника")],
-            [InlineKeyboardButton(text="медицинская организация", callback_data="discovery:niche:медицинская организация")],
-            [InlineKeyboardButton(text="ручной ввод", callback_data="discovery:niche:manual")],
+            [InlineKeyboardButton(text="86.23 Стоматология", callback_data="discovery:niche:86.23")],
+            [InlineKeyboardButton(text="56.10 Рестораны", callback_data="discovery:niche:56.10")],
+            [InlineKeyboardButton(text="69.10 Юридические услуги", callback_data="discovery:niche:69.10")],
+            [InlineKeyboardButton(text="Ручной OKVED", callback_data="discovery:niche:manual")],
         ]
     )
 
@@ -38,10 +37,12 @@ def discovery_limit_markup() -> InlineKeyboardMarkup:
 def discovery_preview_markup(preview_id: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="✅ Импортировать активные новые", callback_data=f"discovery:import:{preview_id}:active_new")],
-            [InlineKeyboardButton(text="✅ Импортировать все новые", callback_data=f"discovery:import:{preview_id}:all_new")],
-            [InlineKeyboardButton(text="📤 Экспорт preview CSV", callback_data=f"discovery:export:{preview_id}")],
-            [InlineKeyboardButton(text="❌ Отмена", callback_data="discovery:cancel")],
+            [InlineKeyboardButton(text="Импортировать active new", callback_data=f"discovery:import:{preview_id}:active_new")],
+            [InlineKeyboardButton(text="Импортировать все new", callback_data=f"discovery:import:{preview_id}:all_new")],
+            [InlineKeyboardButton(text="Импортировать с сайтами", callback_data=f"discovery:import:{preview_id}:new_with_websites")],
+            [InlineKeyboardButton(text="Импортировать phone/site", callback_data=f"discovery:import:{preview_id}:new_with_phone_or_website")],
+            [InlineKeyboardButton(text="Экспорт preview CSV", callback_data=f"discovery:export:{preview_id}")],
+            [InlineKeyboardButton(text="Отмена", callback_data="discovery:cancel")],
         ]
     )
 
@@ -49,7 +50,7 @@ def discovery_preview_markup(preview_id: str) -> InlineKeyboardMarkup:
 def discovery_after_import_markup() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🧠 Запустить research", callback_data="research_queue:from_last_import")],
-            [InlineKeyboardButton(text="⬅️ Назад", callback_data="company:list")],
+            [InlineKeyboardButton(text="Запустить research", callback_data="research_queue:from_last_import")],
+            [InlineKeyboardButton(text="Назад", callback_data="company:list")],
         ]
     )

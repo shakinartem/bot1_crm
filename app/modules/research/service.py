@@ -151,7 +151,7 @@ async def _apply_parsed_data(
     parsed,
 ) -> list[str]:
     updated_fields: list[str] = []
-    if website_url and (not company.website or confidence >= 60) and company.website != website_url:
+    if website_url and _can_replace_website(company.website) and company.website != website_url:
         company.website = website_url
         updated_fields.append("website")
     if not company.phone and parsed.contacts.phones:
@@ -197,6 +197,13 @@ async def _apply_parsed_data(
             )
             existing.add(key)
     return updated_fields
+
+
+def _can_replace_website(current_website: str | None) -> bool:
+    if not current_website:
+        return True
+    normalized = current_website.strip().lower()
+    return not normalized.startswith(("http://", "https://"))
 
 
 async def _persist_research_outcome(

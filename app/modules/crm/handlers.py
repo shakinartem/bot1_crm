@@ -4,7 +4,7 @@ from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, Message
 
 from app.database import async_session_factory
 from app.modules.analytics.service import format_company_card_with_score
@@ -231,6 +231,7 @@ async def _show_company_card(message: Message, company_id: int, *, edit: bool = 
 
     text = format_company_card_with_score(company)
     markup = company_actions(company_id)
+    markup.inline_keyboard.insert(4, [InlineKeyboardButton(text="📞 План звонка", callback_data=f"sales:open:{company_id}")])
     if edit:
         await _safe_edit_message(message, text, reply_markup=markup, parse_mode="HTML")
         return True

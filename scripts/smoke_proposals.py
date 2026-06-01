@@ -68,6 +68,10 @@ async def verify_services(company_id: int) -> None:
     async with async_session_factory() as session:
         suggestions = await suggest_packages_for_company(session, company_id)
         assert suggestions, "package suggestions must not be empty"
+        assert any(
+            item.code in {"audit_roadmap", "landing_start", "maps_reputation", "crm_bot"}
+            for item in suggestions
+        ), "sales intelligence should influence package selection"
 
         proposal = await generate_commercial_proposal(session, company_id, use_ai=False)
         assert proposal.content.startswith("# Коммерческое предложение"), "proposal must be generated"

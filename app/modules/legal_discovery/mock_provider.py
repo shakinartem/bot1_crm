@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.modules.legal_discovery.schemas import LegalDiscoveredCompany
+from app.modules.legal_discovery.schemas import LegalDiscoveredCompany, LegalDiscoveryDirector
 
 
 def _build_mock_company(
@@ -35,6 +35,10 @@ def _build_mock_company(
         status=status,
         okved=okved,
         okved_name=okved_name,
+        phones=[f"+7 (8452) 000-{index:02d}-{index:02d}"],
+        emails=[f"hello{index}@example.test"],
+        websites=[f"https://clinic-{index}.example.test"],
+        director=LegalDiscoveryDirector(full_name=f"Director {index}", role="Директор"),
         raw_payload={"index": index, "mock": True},
         confidence=confidence,
         warnings=warnings or [],
@@ -57,21 +61,21 @@ MOCK_COMPANIES: list[LegalDiscoveredCompany] = [
     _build_mock_company(13, legal_name='ООО "ДЕНТАЛ БРАВО"', short_name="Дентал Браво Повтор", inn="6453000001", ogrn="1026403000001"),
     _build_mock_company(14, legal_name='ООО "ГОРОДСКАЯ СТОМАТОЛОГИЯ"', short_name="Городская Стоматология", status="inactive", confidence="medium"),
     _build_mock_company(15, legal_name='ООО "ФОРМУЛА УЛЫБКИ"', short_name="Формула Улыбки"),
-    _build_mock_company(16, legal_name='ООО "ПЛОМБА+"', short_name="Пломба+", warnings=["Нет short digital footprint"], confidence="medium"),
+    _build_mock_company(16, legal_name='ООО "ПЛОМБА+"', short_name="Пломба+", warnings=["no_short_digital_footprint"], confidence="medium"),
     _build_mock_company(17, legal_name='ООО "32 КАРАТА"', short_name="32 Карата"),
     _build_mock_company(18, legal_name='ООО "МЕДИКАЛ ДЕНТ"', short_name="Медикал Дент", okved="86.21", okved_name="Общая врачебная практика", confidence="medium"),
     _build_mock_company(19, legal_name='ООО "КОМФОРТ ДЕНТ"', short_name="Комфорт Дент", status="inactive", confidence="low"),
     _build_mock_company(20, legal_name='ООО "ДЕНТ СИТИ"', short_name="Дент Сити"),
-    _build_mock_company(21, legal_name='ООО "САРТОМ"', short_name="Сартом", warnings=["Неполный адрес"], address_suffix="пр. Кирова"),
+    _build_mock_company(21, legal_name='ООО "САРТОМ"', short_name="Сартом", warnings=["partial_address"], address_suffix="пр. Кирова"),
     _build_mock_company(22, legal_name='ООО "АКАДЕМИЯ УЛЫБКИ"', short_name="Академия Улыбки"),
     _build_mock_company(23, legal_name='ООО "БРАВО ДЕНТ"', short_name="Браво Дент", city="Энгельс"),
     _build_mock_company(24, legal_name='ООО "ПРОФИ ДЕНТ"', short_name="Профи Дент"),
     _build_mock_company(25, legal_name='ООО "СТОМАТОЛОГИЯ НА МОСКОВСКОЙ"', short_name="На Московской"),
-    _build_mock_company(26, legal_name='ООО "МЕДСЕРВИС"', short_name="Медсервис", okved="86.90", okved_name="Прочая медицинская деятельность", confidence="low", warnings=["Ниша подтверждена неявно"]),
+    _build_mock_company(26, legal_name='ООО "МЕДСЕРВИС"', short_name="Медсервис", okved="86.90", okved_name="Прочая медицинская деятельность", confidence="low", warnings=["weak_niche_match"]),
     _build_mock_company(27, legal_name='ООО "УЛЫБКА ПЛЮС"', short_name="Улыбка Плюс"),
     _build_mock_company(28, legal_name='ООО "ЭЛАЙНЕР ЦЕНТР"', short_name="Элайнер Центр"),
     _build_mock_company(29, legal_name='ООО "СКАН ДЕНТ"', short_name="Скан Дент"),
-    _build_mock_company(30, legal_name='ООО "ЛИНИЯ ДОВЕРИЯ"', short_name="Линия Доверия", confidence="low", warnings=["Слабое совпадение по нише"]),
+    _build_mock_company(30, legal_name='ООО "ЛИНИЯ ДОВЕРИЯ"', short_name="Линия Доверия", confidence="low", warnings=["weak_niche_match"]),
 ]
 
 
@@ -83,9 +87,15 @@ class MockLegalDiscoveryProvider:
     async def search_companies(
         self,
         query: str,
+        okved_code: str | None = None,
+        okved_title: str | None = None,
         city: str | None = None,
         region: str | None = None,
         limit: int = 50,
+        only_main_okved: bool = True,
+        only_active: bool = True,
+        include_profiles: bool = True,
+        concurrency: int | None = None,
     ) -> list[LegalDiscoveredCompany]:
         normalized_query = query.lower().strip()
         normalized_city = (city or "").lower().strip()

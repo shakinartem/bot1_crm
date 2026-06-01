@@ -240,6 +240,16 @@ class Bot2TaskContext(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class Bot2SalesIntelligenceContext(BaseModel):
+    material_score: dict | None = None
+    closing_criteria: dict | None = None
+    cold_call_plan_summary: str | None = None
+    soprano_questions: dict | None = None
+    first_offer: str | None = None
+    risks: list[str] = Field(default_factory=list)
+    generation_mode: str | None = None
+
+
 class Bot2ConsultationContextRead(BaseModel):
     company: Bot2CompanyContext
     decision_makers: list[Bot2DecisionMakerContext]
@@ -253,3 +263,4 @@ class Bot2ConsultationContextRead(BaseModel):
     enrichment: Bot2EnrichmentContextRead | None = None
     intelligence: Bot2IntelligenceContextRead | None = None
     research: ResearchContextRead | None = None
+    sales_intelligence: Bot2SalesIntelligenceContext | None = None

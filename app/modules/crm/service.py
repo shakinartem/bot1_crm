@@ -29,6 +29,7 @@ from app.modules.crm.schemas import (
     Bot2ContactContext,
     Bot2DecisionMakerContext,
     Bot2InteractionContext,
+    Bot2SalesIntelligenceContext,
     Bot2TaskContext,
     CompanyCreate,
     CompanyUpdate,
@@ -700,6 +701,7 @@ async def build_bot2_consultation_context(
     from app.modules.enrichment.service import build_enrichment_context_for_company
     from app.modules.intelligence.service import build_intelligence_context_for_company
     from app.modules.research.service import build_research_context_for_company
+    from app.modules.sales_intelligence.service import generate_cold_call_plan, get_latest_sales_intelligence
 
     company = await get_company(session, company_id)
     if not company:
@@ -757,6 +759,25 @@ async def build_bot2_consultation_context(
         f"Открытые задачи: {open_task_titles}."
     )
 
+    latest_sales_intelligence = await get_latest_sales_intelligence(session, company_id)
+    cold_call_plan = await generate_cold_call_plan(session, company_id, use_ai=False)
+    sales_intelligence = Bot2SalesIntelligenceContext(
+        material_score=latest_sales_intelligence.material_score.model_dump(mode="json"),
+        closing_criteria=latest_sales_intelligence.closing_criteria.model_dump(mode="json"),
+        cold_call_plan_summary=cold_call_plan.copyable_short_script,
+        soprano_questions=latest_sales_intelligence.soprano_questions.model_dump(mode="json"),
+        first_offer=cold_call_plan.first_offer,
+        risks=list(
+            dict.fromkeys(
+                [
+                    *latest_sales_intelligence.material_score.risks[:3],
+                    *latest_sales_intelligence.closing_criteria.risks[:3],
+                ]
+            )
+        ),
+        generation_mode=cold_call_plan.generation_mode,
+    )
+
     return Bot2ConsultationContextRead(
         company=Bot2CompanyContext.model_validate(company),
         decision_makers=[Bot2DecisionMakerContext.model_validate(item) for item in decision_makers],
@@ -770,6 +791,7 @@ async def build_bot2_consultation_context(
         enrichment=await build_enrichment_context_for_company(session, company_id),
         intelligence=await build_intelligence_context_for_company(session, company_id),
         research=await build_research_context_for_company(session, company_id),
+        sales_intelligence=sales_intelligence,
     )
 
 

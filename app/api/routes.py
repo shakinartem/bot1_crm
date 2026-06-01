@@ -75,8 +75,10 @@ from app.modules.legal_discovery.schemas import (
     LegalDiscoveryImportRequest,
     LegalDiscoveryImportResult,
     LegalDiscoveryPreview,
+    PopularOkvedItem,
     LegalDiscoverySearchRequest,
 )
+from app.modules.legal_discovery.okved_catalog import list_popular_okved
 from app.modules.legal_discovery.service import import_legal_discovery_preview, run_legal_discovery_preview
 from app.modules.proposals.keyboards import package_catalog_payload
 from app.modules.proposals.schemas import (
@@ -113,6 +115,21 @@ from app.modules.research_queue.service import (
     run_research_batch,
     serialize_job,
 )
+from app.modules.sales_intelligence.schemas import (
+    ClosingCriteriaReadiness,
+    ColdCallPlan,
+    ColdCallPlanRequest,
+    LatestSalesIntelligenceRead,
+    SalesMaterialScore,
+    SopranoQuestionSet,
+)
+from app.modules.sales_intelligence.service import (
+    build_closing_criteria_readiness,
+    calculate_company_material_score,
+    generate_cold_call_plan,
+    generate_soprano_questions,
+    get_latest_sales_intelligence,
+)
 
 router = APIRouter()
 
@@ -148,11 +165,22 @@ async def legal_discovery_search(
     return await run_legal_discovery_preview(
         session,
         query=payload.query,
+        okved_code=payload.okved_code,
+        okved_title=payload.okved_title,
         city=payload.city,
         region=payload.region,
         limit=payload.limit,
+        only_main_okved=payload.only_main_okved,
+        only_active=payload.only_active,
+        include_profiles=payload.include_profiles,
+        concurrency=payload.concurrency,
         provider_code=payload.provider,
     )
+
+
+@api_router.get("/legal-discovery/okved/popular", response_model=list[PopularOkvedItem])
+async def legal_discovery_popular_okved():
+    return list_popular_okved()
 
 
 @api_router.post("/legal-discovery/import", response_model=LegalDiscoveryImportResult)
@@ -161,7 +189,13 @@ async def legal_discovery_import(
     session: AsyncSession = Depends(get_session),
 ):
     try:
-        return await import_legal_discovery_preview(session, payload.preview_id, payload.mode)
+        return await import_legal_discovery_preview(
+            session,
+            payload.preview_id,
+            payload.mode,
+            include_weak=payload.include_weak,
+            run_research_after_import=payload.run_research_after_import,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -217,6 +251,69 @@ async def export_companies(
         media_type="text/csv",
         filename=result.filename,
     )
+
+
+@api_router.get("/companies/{company_id}/sales-intelligence/material-score", response_model=SalesMaterialScore)
+async def sales_intelligence_material_score(
+    company_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await calculate_company_material_score(session, company_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@api_router.get("/companies/{company_id}/sales-intelligence/closing-criteria", response_model=ClosingCriteriaReadiness)
+async def sales_intelligence_closing_criteria(
+    company_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await build_closing_criteria_readiness(session, company_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@api_router.get("/companies/{company_id}/sales-intelligence/soprano-questions", response_model=SopranoQuestionSet)
+async def sales_intelligence_soprano_questions(
+    company_id: int,
+    niche: str | None = None,
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await generate_soprano_questions(session, company_id, niche=niche)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@api_router.post("/companies/{company_id}/sales-intelligence/cold-call-plan", response_model=ColdCallPlan)
+async def sales_intelligence_cold_call_plan(
+    company_id: int,
+    payload: ColdCallPlanRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await generate_cold_call_plan(
+            session,
+            company_id,
+            use_ai=payload.use_ai,
+            force_regenerate=payload.force_regenerate,
+            niche=payload.niche,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@api_router.get("/companies/{company_id}/sales-intelligence/latest", response_model=LatestSalesIntelligenceRead)
+async def sales_intelligence_latest(
+    company_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await get_latest_sales_intelligence(session, company_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @api_router.get("/digest/daily", response_model=DailyDigestRead)

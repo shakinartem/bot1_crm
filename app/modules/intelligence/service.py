@@ -307,7 +307,7 @@ def _apply_site_to_company(
     parsed_site: ParsedCompanySite,
 ) -> list[str]:
     updated_fields: list[str] = []
-    if resolution.selected_url and (not company.website or resolution.confidence >= 75):
+    if resolution.selected_url and _can_replace_website(company.website):
         if company.website != resolution.selected_url:
             company.website = resolution.selected_url
             updated_fields.append("website")
@@ -329,6 +329,13 @@ def _apply_site_to_company(
             company.maps_url = maps[0]
             updated_fields.append("maps_url")
     return updated_fields
+
+
+def _can_replace_website(current_website: str | None) -> bool:
+    if not current_website:
+        return True
+    normalized = current_website.strip().lower()
+    return not normalized.startswith(("http://", "https://"))
 
 
 async def _sync_contact_points(session: AsyncSession, company: Company, parsed_site: ParsedCompanySite) -> None:

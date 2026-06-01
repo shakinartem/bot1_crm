@@ -175,7 +175,13 @@ async def list_lead_scores(
     overdue_only: bool = False,
 ) -> list[LeadScoreRead]:
     companies = await _load_companies(session, AnalyticsFilters(status=status, source=source, city=city))
-    items = [build_company_lead_score(company) for company in companies]
+    items = [
+        await _enrich_lead_score_with_sales_intelligence(
+            session,
+            build_company_lead_score(company),
+        )
+        for company in companies
+    ]
     filtered = [
         item
         for item in items
@@ -200,11 +206,90 @@ async def get_company_lead_score(session: AsyncSession, company_id: int) -> Lead
     company = await _load_company(session, company_id)
     if not company:
         return None
-    return build_company_lead_score(company)
+    return await _enrich_lead_score_with_sales_intelligence(
+        session,
+        build_company_lead_score(company),
+    )
 
 
 def build_company_lead_score(company: Company) -> LeadScoreRead:
     return calculate_lead_score(_company_context(company))
+
+
+async def _enrich_lead_score_with_sales_intelligence(
+    session: AsyncSession,
+    lead_score: LeadScoreRead,
+) -> LeadScoreRead:
+    try:
+        from app.modules.sales_intelligence.service import get_latest_sales_intelligence
+    except Exception:
+        return lead_score
+
+    try:
+        sales_intelligence = await get_latest_sales_intelligence(session, lead_score.company_id)
+    except Exception:
+        return lead_score
+
+    material_score = sales_intelligence.material_score.total_score
+    updated_score = lead_score.score
+    reasons = list(lead_score.reasons)
+    risks = list(lead_score.risks)
+
+    if material_score >= 70:
+        updated_score += 10
+        reasons.append(f"digital materials look relatively strong ({material_score}/100)")
+    elif material_score >= 50:
+        updated_score += 5
+        reasons.append(f"digital materials look workable for outreach ({material_score}/100)")
+    elif material_score < 30:
+        updated_score -= 10
+        risks.append(f"digital materials look weak and may slow conversion ({material_score}/100)")
+    else:
+        risks.append(f"digital materials still look uneven ({material_score}/100)")
+
+    if sales_intelligence.closing_criteria.decision_maker.status in {"unknown", "weak"}:
+        risks.append("decision-maker access is still unconfirmed")
+    if sales_intelligence.closing_criteria.here_and_now.status in {"unknown", "weak"}:
+        risks.append("current urgency is still unconfirmed")
+
+    updated_score = max(0, min(100, updated_score))
+    can_prepare_proposal = updated_score >= 75 and lead_score.status in {
+        CompanyStatus.INTERESTED.value,
+        CompanyStatus.CONSULTATION_PLANNED.value,
+        CompanyStatus.PROPOSAL_SENT.value,
+    }
+    proposal_recommendation = "РњРѕР¶РЅРѕ РїРѕРґРіРѕС‚РѕРІРёС‚СЊ РљРџ / РґРѕРіРѕРІРѕСЂРЅС‹Р№ РїР°РєРµС‚" if can_prepare_proposal else None
+
+    return lead_score.model_copy(
+        update={
+            "score": updated_score,
+            "grade": _grade_score(updated_score),
+            "reasons": _dedupe_texts(reasons),
+            "risks": _dedupe_texts(risks),
+            "can_prepare_proposal": can_prepare_proposal,
+            "proposal_recommendation": proposal_recommendation,
+        }
+    )
+
+
+def _grade_score(score: int) -> str:
+    if score <= 24:
+        return "cold"
+    if score <= 49:
+        return "warm"
+    if score <= 74:
+        return "hot"
+    return "priority"
+
+
+def _dedupe_texts(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in items:
+        if item not in seen:
+            seen.add(item)
+            result.append(item)
+    return result
 
 
 def format_company_card_with_score(company: Company) -> str:
@@ -212,10 +297,24 @@ def format_company_card_with_score(company: Company) -> str:
 
     score = build_company_lead_score(company)
     research_text = _format_research_summary(company)
+    has_sales_materials = bool(
+        company.website
+        or company.phone
+        or company.contacts
+        or company.decision_makers
+        or company.enrichment_snapshots
+        or company.intelligence_snapshots
+    )
     lines = [
         format_company_card(company),
         "",
         research_text,
+        "",
+        "📊 <b>Материалы:</b>",
+        "Есть базовые сигналы для оценки." if has_sales_materials else "Данных для оценки пока мало.",
+        "",
+        "📞 <b>План звонка:</b>",
+        "Откройте Sales Intelligence через кнопку в карточке компании.",
         "",
         "🔥 <b>Скоринг:</b>",
         f"Оценка: {score.score}/100 — {escape(score.grade)}",

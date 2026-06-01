@@ -30,6 +30,8 @@ class ContactType(StrEnum):
     WHATSAPP = "whatsapp"
     VK = "vk"
     INSTAGRAM = "instagram"
+    YOUTUBE = "youtube"
+    MAP_URL = "map_url"
     OTHER = "other"
 
 
@@ -107,6 +109,8 @@ CONTACT_TYPE_LABELS = {
     ContactType.WHATSAPP.value: "whatsapp",
     ContactType.VK.value: "vk",
     ContactType.INSTAGRAM.value: "instagram",
+    ContactType.YOUTUBE.value: "youtube",
+    ContactType.MAP_URL.value: "map_url",
     ContactType.OTHER.value: "other",
 }
 

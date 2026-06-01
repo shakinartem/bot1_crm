@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from app.database import async_session_factory, create_db_schema  # noqa: E402
 from app.main import app  # noqa: E402
+from app.modules.crm.service import get_company  # noqa: E402
 from app.modules.legal_discovery.service import import_legal_discovery_preview, run_legal_discovery_preview  # noqa: E402
 
 
@@ -27,16 +28,22 @@ async def verify_service() -> str:
     async with async_session_factory() as session:
         preview = await run_legal_discovery_preview(
             session,
-            query="стоматология",
-            city="Саратов",
+            query="",
+            okved_code="86.23",
             limit=25,
             provider_code="mock",
         )
         assert preview.total_found == 25, "mock preview must return 25 items"
+        assert preview.with_inn_count >= 1, "preview must count companies with INN"
         assert preview.active_count >= 1, "preview must count active companies"
         assert preview.new_count >= 1, "preview must include new companies"
+
         first_import = await import_legal_discovery_preview(session, preview.preview_id, "active_new")
         assert first_import.added_count >= 1, "import must add companies"
+        company = await get_company(session, first_import.added_company_ids[0])
+        assert company is not None and company.contacts, "import must create contact points"
+        assert company.decision_makers, "import must create a decision maker when director exists"
+
         second_import = await import_legal_discovery_preview(session, preview.preview_id, "active_new")
         assert second_import.added_count == 0, "repeated import must not create duplicates"
         return preview.preview_id
@@ -47,8 +54,8 @@ def verify_api() -> None:
         preview = client.post(
             "/api/legal-discovery/search",
             json={
-                "query": "стоматология",
-                "city": "Саратов",
+                "query": "",
+                "okved_code": "86.23",
                 "limit": 10,
                 "provider": "mock",
             },
@@ -57,9 +64,12 @@ def verify_api() -> None:
         preview_payload = preview.json()
         assert preview_payload["total_found"] == 10, "API preview must honor limit"
 
+        popular = client.get("/api/legal-discovery/okved/popular")
+        assert popular.status_code == 200, "popular OKVED endpoint must work"
+
         imported = client.post(
             "/api/legal-discovery/import",
-            json={"preview_id": preview_payload["preview_id"], "mode": "active_new"},
+            json={"preview_id": preview_payload["preview_id"], "mode": "active_new", "include_weak": False},
         )
         assert imported.status_code == 200, "import endpoint must work"
 

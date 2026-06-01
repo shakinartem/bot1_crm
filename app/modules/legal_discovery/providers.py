@@ -3,7 +3,9 @@ from __future__ import annotations
 from typing import Protocol
 
 from app.config import Settings, get_settings
+from app.modules.legal_discovery.checko_html import CheckoHtmlLegalDiscoveryProvider
 from app.modules.legal_discovery.mock_provider import MockLegalDiscoveryProvider
+from app.modules.legal_discovery.okved_catalog import normalize_okved_code, resolve_okved_by_query
 from app.modules.legal_discovery.schemas import LegalDiscoveredCompany
 
 
@@ -15,9 +17,15 @@ class LegalDiscoveryProvider(Protocol):
     async def search_companies(
         self,
         query: str,
+        okved_code: str | None = None,
+        okved_title: str | None = None,
         city: str | None = None,
         region: str | None = None,
         limit: int = 50,
+        only_main_okved: bool = True,
+        only_active: bool = True,
+        include_profiles: bool = True,
+        concurrency: int | None = None,
     ) -> list[LegalDiscoveredCompany]:
         ...
 
@@ -31,9 +39,15 @@ class DisabledLegalDiscoveryProvider:
     async def search_companies(
         self,
         query: str,
+        okved_code: str | None = None,
+        okved_title: str | None = None,
         city: str | None = None,
         region: str | None = None,
         limit: int = 50,
+        only_main_okved: bool = True,
+        only_active: bool = True,
+        include_profiles: bool = True,
+        concurrency: int | None = None,
     ) -> list[LegalDiscoveredCompany]:
         return []
 
@@ -43,12 +57,21 @@ def get_legal_discovery_provider(settings: Settings | None = None) -> LegalDisco
     code = settings.legal_discovery_provider.lower().strip()
     if code == "mock":
         return MockLegalDiscoveryProvider()
-    if code == "api_fns" and settings.api_fns_key:
-        return DisabledLegalDiscoveryProvider("api_fns", "API-ФНС")
-    if code == "dadata" and settings.dadata_token:
-        return DisabledLegalDiscoveryProvider("dadata", "DaData")
+    if code == "checko_html":
+        return CheckoHtmlLegalDiscoveryProvider(settings)
     if code == "api_fns":
-        return DisabledLegalDiscoveryProvider("api_fns", "API-ФНС")
+        return DisabledLegalDiscoveryProvider("api_fns", "API-FNS")
     if code == "dadata":
         return DisabledLegalDiscoveryProvider("dadata", "DaData")
     return MockLegalDiscoveryProvider()
+
+
+def resolve_okved_input(query: str, okved_code: str | None = None) -> tuple[str | None, str | None]:
+    normalized = normalize_okved_code(okved_code)
+    if normalized:
+        item = resolve_okved_by_query(normalized)
+        return normalized, item.title if item else None
+    guessed = resolve_okved_by_query(query)
+    if guessed:
+        return guessed.normalized_code, guessed.title
+    return None, None

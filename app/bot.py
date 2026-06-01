@@ -18,6 +18,7 @@ from app.modules.intelligence.handlers import router as intelligence_router
 from app.modules.legal_discovery.handlers import router as legal_discovery_router
 from app.modules.proposals.handlers import router as proposals_router
 from app.modules.research_queue.handlers import router as research_queue_router
+from app.modules.sales_intelligence.handlers import router as sales_intelligence_router
 
 
 async def main() -> None:
@@ -38,6 +39,7 @@ async def main() -> None:
     dp.include_router(enrichment_router)
     dp.include_router(intelligence_router)
     dp.include_router(research_queue_router)
+    dp.include_router(sales_intelligence_router)
     dp.include_router(analytics_router)
     dp.include_router(proposals_router)
     dp.include_router(digest_router)

@@ -181,6 +181,10 @@ async def verify_services(company_ids: dict[str, int]) -> None:
         hot_score = await get_company_lead_score(session, company_ids["hot_id"])
         assert hot_score is not None, "company score must be available"
         assert hot_score.score >= 50, "hot lead should have high score"
+        assert any(
+            "digital materials" in item.lower()
+            for item in [*hot_score.reasons, *hot_score.risks]
+        ), "lead score should include sales-intelligence digital context"
 
         cold_base = await build_cold_base(session)
         assert any(item.company_id == company_ids["cold_id"] for item in cold_base), "cold base lead must be listed"

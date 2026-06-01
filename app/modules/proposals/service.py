@@ -78,6 +78,10 @@ async def suggest_packages_for_company(session: AsyncSession, company_id: int) -
     suggestions: dict[str, PackageSuggestion] = {}
     enrichment = await build_enrichment_context_for_company(session, company_id)
     intelligence = await build_intelligence_context_for_company(session, company_id)
+    try:
+        from app.modules.sales_intelligence.service import get_latest_sales_intelligence
+    except Exception:
+        get_latest_sales_intelligence = None
 
     data_is_sparse = _is_sparse(company)
     if data_is_sparse:
@@ -86,6 +90,75 @@ async def suggest_packages_for_company(session: AsyncSession, company_id: int) -
             "Данных о текущей воронке мало, безопасный первый шаг — диагностика.",
             "high",
         )
+
+    if get_latest_sales_intelligence is not None:
+        try:
+            sales_intelligence = await get_latest_sales_intelligence(session, company_id)
+        except Exception:
+            sales_intelligence = None
+        if sales_intelligence is not None:
+            material_score = sales_intelligence.material_score.total_score
+            if material_score < 30:
+                suggestions.setdefault(
+                    "audit_roadmap",
+                    _make_suggestion(
+                        "audit_roadmap",
+                        "Material score shows a weak public-side foundation, so a diagnostic roadmap is the safest first commercial step.",
+                        "high",
+                    ),
+                )
+                suggestions.setdefault(
+                    "landing_start",
+                    _make_suggestion(
+                        "landing_start",
+                        "Material score suggests the entry-point experience is still weak, so strengthening the landing and conversion path looks justified.",
+                        "high",
+                    ),
+                )
+                suggestions.setdefault(
+                    "maps_reputation",
+                    _make_suggestion(
+                        "maps_reputation",
+                        "A weak material score often means trust and local proof need reinforcing through maps and reputation assets.",
+                        "medium",
+                    ),
+                )
+            elif material_score < 55:
+                suggestions.setdefault(
+                    "audit_roadmap",
+                    _make_suggestion(
+                        "audit_roadmap",
+                        "Material score suggests there are still a few conversion weak points worth mapping before a larger rollout.",
+                        "medium",
+                    ),
+                )
+            if sales_intelligence.material_score.socials_score < 40:
+                suggestions.setdefault(
+                    "smm_funnel",
+                    _make_suggestion(
+                        "smm_funnel",
+                        "Sales intelligence indicates social proof is still light, so content and nurture channels may deserve attention.",
+                        "medium",
+                    ),
+                )
+            if sales_intelligence.material_score.maps_score < 45:
+                suggestions.setdefault(
+                    "maps_reputation",
+                    _make_suggestion(
+                        "maps_reputation",
+                        "Sales intelligence indicates maps visibility or trust signals are still thin, so local reputation work may help first.",
+                        "medium",
+                    ),
+                )
+            if sales_intelligence.material_score.conversion_score < 45:
+                suggestions.setdefault(
+                    "crm_bot",
+                    _make_suggestion(
+                        "crm_bot",
+                        "Sales intelligence suggests the path from first interest to follow-up may still be leaking, so CRM automation is worth discussing.",
+                        "medium",
+                    ),
+                )
 
     if not (company.website or "").strip():
         suggestions["landing_start"] = _make_suggestion(
