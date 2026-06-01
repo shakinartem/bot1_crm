@@ -139,6 +139,7 @@ async def main() -> None:
                 "sales_summary",
             ):
                 assert key in payload, f"{key} must be present in consultation context"
+            assert payload["sales_intelligence"] is not None, "sales intelligence block must be present"
             assert payload["decision_makers"], "decision makers must be returned"
             assert payload["contacts"], "contacts must be returned"
             assert payload["recent_interactions"], "recent interactions must be returned"
@@ -155,6 +156,11 @@ async def main() -> None:
             assert "Источник: cold_call." in payload["sales_summary"], "sales summary must include source"
             assert "Следующий шаг: Подготовить консультацию." in payload["sales_summary"], "sales summary must include recommended next step"
             assert "Заметки: Нужно понять, где теряют заявки." in payload["sales_summary"], "sales summary must include notes"
+            sales_intelligence = payload["sales_intelligence"]
+            assert sales_intelligence["material_score"]["total_score"] >= 0
+            assert sales_intelligence["closing_criteria"]["next_best_question"]
+            assert sales_intelligence["cold_call_plan_summary"]
+            assert sales_intelligence["generation_mode"] == "fallback"
 
         with temporary_env(BOT2_API_TOKEN="bot2-token"):
             unauthorized = client.get(f"/api/bot2/companies/{company_id}/consultation-context")

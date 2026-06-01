@@ -2,14 +2,17 @@
 
 ## Current Sprint
 
+- [ ] Safe snapshot persistence for `sales_intelligence` once `IntelligenceSnapshot` gets dedicated JSON fields or an approved migration path
+  Current MVP stays on-demand only: no new sales-intelligence table, no migration, no merge into unsuitable snapshot fields.
 - [ ] Manager roles and multi-user CRM
 - [ ] Real document templates with реквизиты
 - [ ] Real Bot 2 push integration
 - [ ] Advanced conversion attribution
 - [ ] External maps/reviews enrichment
 - [ ] Batch intelligence enrichment
-- [ ] Real FNS/DaData credentials testing
-- [ ] Real Yandex/Google search provider testing
+- [ ] Real API-FNS credentials testing
+- [ ] Manual live Checko HTML validation
+- [ ] Manual live Yandex Search validation
 
 ## Backlog
 
@@ -70,6 +73,12 @@
 - Analytics CSV export
 - Analytics API endpoints
 - Analytics smoke check
+- Sales intelligence schemas and scoring
+- Sales intelligence API endpoints
+- Sales intelligence Telegram workflow
+- Sales intelligence Bot 2 context block
+- Sales intelligence cold-call-plan smoke check
+- Sales intelligence integration with analytics and proposals
 - Website research enrichment
 - Enrichment snapshots
 - Social/contact/map detection
@@ -114,18 +123,20 @@
 - Transcription via `faster-whisper` or `whisper.cpp`.
 - Telephony integration.
 - Legal discovery module
-- Mock legal discovery provider
-- Legal discovery preview/import
+- Checko HTML legal discovery provider
+- Popular OKVED catalog
+- Checko preview/import with contact and director mapping
 - Research queue
 - Safe fetch/browser abstraction
+- Optional Camoufox backend
 - Website resolver by INN/legal name
 - Site parser for contacts/socials/signals
 - Research Telegram workflow
 - Research API endpoints
 - Research batch CLI script
 - Research smoke checks
-- Real API-FNS/DaData credentials testing
-- Real Yandex/Google search provider testing
+- Offline Checko/Yandex/browser smoke checks
+- Real API-FNS credentials testing
+- Manual live Yandex testing
 - Optional Crawlee backend experiment
-- Optional Camoufox renderer experiment without bypass logic
 - Batch research scheduling

@@ -2,6 +2,28 @@
 
 Telegram-first CRM for SHARiK digital. The bot helps a sales manager work cold dental-clinic leads: company cards, decision makers, contacts, touch history, statuses, tasks, AI call prep, CSV import, CRM statistics, export, consultation package, and Bot 2 handoff draft.
 
+The current MVP also includes a dedicated `sales_intelligence` layer for:
+
+- rule-based material scoring
+- five closing-criteria readiness checks
+- SOPRANO question generation
+- AI-or-fallback cold call plan generation
+- Telegram/API/Bot 2/proposals/analytics integrations
+
+Storage note for the current MVP:
+
+- `sales-intelligence/latest` is assembled on demand from CRM, enrichment, intelligence, and research context.
+- `saved_at` stays `null` because `IntelligenceSnapshot` does not yet expose a safe dedicated JSON/text field for this payload.
+- No dedicated sales-intelligence snapshot table was added.
+- No migration was added for sales-intelligence persistence in this stage.
+
+Current MVP discovery defaults:
+
+- `Checko HTML` is the primary legal discovery path.
+- `Yandex Search API` is the primary real website search path.
+- `Camoufox` is optional and lazy-loaded through `BROWSER_BACKEND=camoufox`.
+- Smoke scripts stay offline by using fixtures and mock backends.
+
 ## Setup
 
 ```bash
@@ -12,6 +34,19 @@ copy .env.example .env
 ```
 
 Set `BOT_TOKEN` in `.env`.
+
+For the new discovery/research MVP also set:
+
+- `LEGAL_DISCOVERY_PROVIDER=checko_html`
+- `SEARCH_PROVIDER=yandex`
+- `YANDEX_SEARCH_API_KEY`
+- `YANDEX_SEARCH_FOLDER_ID`
+
+Optional browser-backed discovery:
+
+- `BROWSER_BACKEND=camoufox`
+- `CAMOUFOX_HEADLESS=true`
+- `CAMOUFOX_TIMEOUT=20`
 
 ## Run
 
@@ -40,6 +75,31 @@ alembic upgrade head
 ```
 
 For local MVP startup the app also creates tables automatically, but schema changes should still go through Alembic.
+
+## Discovery and Research MVP
+
+The current legal discovery flow is OKVED-first and supports:
+
+- popular OKVED catalog via API and Telegram flow
+- Checko HTML preview/import
+- contact/director mapping into CRM
+- optional research queue launch after import
+
+Recommended defaults:
+
+- profile concurrency: `5`
+- max concurrency cap: `30`
+- keep list pages near-sequential
+- treat live Checko/Yandex checks as manual only
+
+Offline verification commands:
+
+```bash
+py scripts/smoke_browser_backend.py
+py scripts/smoke_checko_html.py
+py scripts/smoke_yandex_search.py
+py scripts/smoke_legal_discovery.py
+```
 
 ## CRM Core
 
@@ -78,6 +138,11 @@ CRM:
 - `POST /api/imports/csv/preview`
 - `POST /api/imports/csv/commit`
 - `POST /api/companies/{id}/ai/call-prep`
+- `GET /api/companies/{id}/sales-intelligence/material-score`
+- `GET /api/companies/{id}/sales-intelligence/closing-criteria`
+- `GET /api/companies/{id}/sales-intelligence/soprano-questions`
+- `POST /api/companies/{id}/sales-intelligence/cold-call-plan`
+- `GET /api/companies/{id}/sales-intelligence/latest`
 
 `GET /api/companies` supports optional filters:
 
@@ -112,6 +177,17 @@ Preferred endpoints for SHARiK digital Consultation AI:
 - `latest_call_result`
 - `recommended_next_step`
 - `sales_summary`
+- `sales_intelligence`
+
+The `sales_intelligence` block contains:
+
+- `material_score`
+- `closing_criteria`
+- `cold_call_plan_summary`
+- `soprano_questions`
+- `first_offer`
+- `risks`
+- `generation_mode`
 
 Example response shape:
 

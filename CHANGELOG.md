@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Added a new sales intelligence orchestration module with rule-based material scoring, closing-criteria readiness, SOPRANO questions, and AI-or-fallback cold call plans.
+- Added sales intelligence API endpoints for material score, closing criteria, SOPRANO questions, cold call plans, and latest payload reads.
+- Added sales intelligence Telegram workflow and company-card entrypoint.
+- Added Bot 2 sales intelligence context block and on-demand fallback cold-call-plan summary.
+- Integrated sales intelligence into analytics lead scoring and proposal package suggestions.
+- Added `scripts/smoke_material_scoring.py` and `scripts/smoke_call_plan.py`.
+- Tightened smoke coverage so `sales-intelligence/latest` explicitly stays on-demand with `saved_at=null`, and Bot 2 context proves fallback sales-intelligence payload delivery.
+- Kept sales intelligence persistence in on-demand mode because the current `IntelligenceSnapshot` model does not yet expose dedicated JSON fields for safe snapshot merge.
+- Added Checko HTML MVP legal discovery flow with OKVED-first preview/import support.
+- Added popular OKVED catalog and API endpoint.
+- Added browser backend abstraction with disabled, mock, and lazy Camoufox backends.
+- Added fixture-based Checko parser and offline smoke checks for browser, Checko, Yandex, and legal discovery flows.
+- Switched MVP website search preference to Yandex and disabled Google as an active MVP path.
+- Expanded legal discovery import to create contacts, decision makers, and discovery snapshots.
+- Tightened automatic website overwrite rules to avoid replacing an existing valid company website.
 - Added manager daily digest with overdue tasks, today tasks, hot leads, and stale leads.
 - Added weekly sales summary.
 - Added digest commands for Telegram.
