@@ -26,12 +26,11 @@ CALL_RESULT_OPTIONS = [
 
 def main_menu() -> ReplyKeyboardMarkup:
     rows = [
-        [KeyboardButton(text="Компании"), KeyboardButton(text="Добавить компанию")],
-        [KeyboardButton(text="Поиск"), KeyboardButton(text="Импорт CSV")],
-        [KeyboardButton(text="Задачи на сегодня"), KeyboardButton(text="AI-подготовка к звонку")],
-        [KeyboardButton(text="Статистика"), KeyboardButton(text="📈 Аналитика")],
-        [KeyboardButton(text="📤 Экспорт"), KeyboardButton(text="🗓 План дня")],
-        [KeyboardButton(text="Настройки")],
+        [KeyboardButton(text="🔍 Поиск и импорт"), KeyboardButton(text="🏢 CRM / Компании")],
+        [KeyboardButton(text="👤 Мои лиды"), KeyboardButton(text="📞 Продажи")],
+        [KeyboardButton(text="📄 КП и документы"), KeyboardButton(text="🧠 AI / Research")],
+        [KeyboardButton(text="📊 Аналитика"), KeyboardButton(text="⚙️ Настройки")],
+        [KeyboardButton(text="🔍 Поиск компаний")],
     ]
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
 
@@ -54,6 +53,77 @@ def contact_type_menu() -> ReplyKeyboardMarkup:
     buttons = [[KeyboardButton(text=label)] for label in CONTACT_TYPE_LABELS.values()]
     buttons.append([KeyboardButton(text=CANCEL_TEXT)])
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
+
+
+def search_import_menu_markup() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔍 Поиск компаний", callback_data="menu:search_import:companies")],
+            [InlineKeyboardButton(text="📥 Импорт CSV", callback_data="menu:search_import:import_csv")],
+            [InlineKeyboardButton(text="🔎 Поиск по CRM", callback_data="menu:search_import:crm_search")],
+            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu:main")],
+        ]
+    )
+
+
+def crm_section_menu_markup() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📋 Список компаний", callback_data="menu:crm:list")],
+            [InlineKeyboardButton(text="➕ Добавить компанию", callback_data="menu:crm:add")],
+            [InlineKeyboardButton(text="🔎 Поиск по CRM", callback_data="menu:crm:search")],
+            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu:main")],
+        ]
+    )
+
+
+def leads_section_menu_markup() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📌 Мои задачи на сегодня", callback_data="menu:leads:today")],
+            [InlineKeyboardButton(text="📋 Последние компании", callback_data="menu:leads:companies")],
+            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu:main")],
+        ]
+    )
+
+
+def sales_section_menu_markup() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📞 Как открыть план звонка", callback_data="menu:sales:call_plan_help")],
+            [InlineKeyboardButton(text="🧠 Где смотреть SOPRANO", callback_data="menu:sales:soprano_help")],
+            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu:main")],
+        ]
+    )
+
+
+def proposals_section_menu_markup() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📄 Открыть КП / договор в карточке", callback_data="menu:docs:proposal_help")],
+            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu:main")],
+        ]
+    )
+
+
+def ai_research_section_menu_markup() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔎 Research и legal discovery", callback_data="menu:ai:research")],
+            [InlineKeyboardButton(text="🧾 INN / Intelligence", callback_data="menu:ai:intelligence")],
+            [InlineKeyboardButton(text="🤖 Bot2 context", callback_data="menu:ai:bot2")],
+            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu:main")],
+        ]
+    )
+
+
+def settings_section_menu_markup() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="ℹ️ О разделе", callback_data="menu:settings:about")],
+            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu:main")],
+        ]
+    )
 
 
 def company_actions(company_id: int) -> InlineKeyboardMarkup:

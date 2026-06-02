@@ -2,22 +2,13 @@
 
 ## Current Sprint
 
-- [ ] Full RBAC permissions
-- [ ] Web dashboard user management
-- [ ] Team workload analytics
-- [ ] Assignment automation after import
-- [ ] Manager performance reports
-- [ ] Real document templates with реквизитами
-- [ ] Real Bot 2 push integration
-- [ ] Advanced conversion attribution
-- [ ] External maps/reviews enrichment
-- [ ] Batch intelligence enrichment
-- [ ] Live Checko selector tuning
-- [ ] Live Yandex Search testing
-- [ ] Camoufox installation guide
-- [ ] Research queue scaling
-- [ ] Unified app/dashboard planning
-- [ ] Social/maps audit deepening
+- [ ] Improve PDF visual design
+- [ ] Add real agency document templates
+- [ ] Add manager workspace full UI
+- [ ] Live Checko testing
+- [ ] Live Yandex testing
+- [ ] Full RBAC
+- [ ] Web dashboard planning
 
 ## Backlog
 
@@ -130,6 +121,14 @@
 - AI abstraction layer for OpenRouter, Ollama, and fallback
 - Expanded CRM core with contacts, richer interactions, statuses, and tasks
 - Telegram CRM flows for company cards, tasks, notes, contacts, decision makers, search, and AI call prep
+- Russian localization for sales intelligence
+- Russian package display names
+- Bot2 auth documentation
+- Commercial proposal markdown flow retained as current draft format
+- Telegram document section placeholder
+- Grouped Telegram main menu
+- Search companies menu entry
+- Localization smoke test
 
 ## Bugs
 
@@ -142,21 +141,6 @@
 - Legal-data verification via ФНС.
 - Transcription via `faster-whisper` or `whisper.cpp`.
 - Telephony integration.
-- Legal discovery module
-- Checko HTML legal discovery provider
-- Popular OKVED catalog
-- Checko preview/import with contact and director mapping
-- Research queue
-- Safe fetch/browser abstraction
-- Optional Camoufox backend
-- Website resolver by INN/legal name
-- Site parser for contacts/socials/signals
-- Research Telegram workflow
-- Research API endpoints
-- Research batch CLI script
-- Research smoke checks
-- Offline Checko/Yandex/browser smoke checks
-- Real API-FNS credentials testing
-- Manual live Yandex testing
-- Optional Crawlee backend experiment
-- Batch research scheduling
+- Legal discovery module hardening
+- Research queue scheduling
+- Batch research scaling

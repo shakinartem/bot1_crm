@@ -39,11 +39,11 @@ def _weighted_total(component_scores: dict[str, int]) -> int:
 
 
 def _hypothesis(text: str) -> str:
-    return f"Based on the available signals, it may be that {text}."
+    return f"По доступным сигналам можно предположить, что {text}."
 
 
 def _check(text: str) -> str:
-    return f"It may be worth checking whether {text}."
+    return f"Стоит проверить, {text}."
 
 
 def _as_dict(value: Any) -> dict[str, Any]:
@@ -172,13 +172,13 @@ def _score_contacts(company_context: Mapping[str, Any]) -> int:
 def _build_reasons(scores: Mapping[str, int]) -> list[str]:
     reasons: list[str] = []
     if scores["website"] >= 60:
-        reasons.append(_hypothesis("the website already covers several core presentation elements"))
+        reasons.append(_hypothesis("сайт уже закрывает несколько базовых задач упаковки и первого доверия"))
     if scores["maps"] >= 50:
-        reasons.append(_hypothesis("map visibility could already support local discovery"))
+        reasons.append(_hypothesis("карты уже могут поддерживать локальный спрос и обнаружение компании"))
     if scores["trust"] >= 50:
-        reasons.append(_hypothesis("the company shows at least some visible trust signals"))
+        reasons.append(_hypothesis("у компании уже видны отдельные сигналы доверия на публичной стороне"))
     if scores["contact"] >= 60:
-        reasons.append(_hypothesis("prospects can likely find at least one direct contact path"))
+        reasons.append(_hypothesis("клиенту, вероятно, доступно хотя бы одно понятное контактное окно"))
     return reasons
 
 
@@ -187,13 +187,13 @@ def _build_risks(company_context: Mapping[str, Any], scores: Mapping[str, int]) 
     socials = _as_dict(company_context.get("socials"))
     risks: list[str] = []
     if scores["socials"] < 50:
-        risks.append(_check("social channels are inactive, sparse, or not yet building trust consistently"))
+        risks.append(_check("соцсети неактивны, редки или пока слабо усиливают доверие"))
     if scores["conversion"] < 60:
-        risks.append(_check("the next step for a website visitor is not yet obvious enough"))
+        risks.append(_check("следующий шаг для посетителя сайта пока недостаточно очевиден"))
     if not (bool(website.get("has_cta")) or bool(website.get("has_online_booking"))):
-        risks.append(_check("the website is missing a clearly visible call to action or booking step"))
+        risks.append(_check("на сайте нет заметного CTA или понятного шага к записи"))
     if not bool(socials.get("active")):
-        risks.append(_check("social profiles may not be updated regularly enough to reinforce credibility"))
+        risks.append(_check("соцпрофили обновляются недостаточно регулярно, чтобы поддерживать доверие"))
     return risks
 
 
@@ -202,13 +202,13 @@ def _build_opportunities(company_context: Mapping[str, Any], scores: Mapping[str
     maps = _as_dict(company_context.get("maps"))
     opportunities: list[str] = []
     if scores["website"] < 80:
-        opportunities.append(_hypothesis("a clearer website structure could strengthen first impressions"))
+        opportunities.append(_hypothesis("более ясная структура сайта может усилить первое впечатление и понимание оффера"))
     if scores["trust"] < 75:
-        opportunities.append(_hypothesis("additional proof elements could improve perceived trust"))
+        opportunities.append(_hypothesis("дополнительные доказательства и кейсы могут заметно усилить доверие"))
     if not bool(maps.get("has_photos")):
-        opportunities.append(_hypothesis("richer map content could improve local profile credibility"))
+        opportunities.append(_hypothesis("более полное оформление карточек на картах может повысить локальное доверие"))
     if not bool(website.get("has_messenger")):
-        opportunities.append(_hypothesis("adding a messenger contact option could reduce friction for new enquiries"))
+        opportunities.append(_hypothesis("добавление мессенджера может снизить трение при первом обращении"))
     return opportunities
 
 
@@ -218,13 +218,13 @@ def _build_next_improvements(company_context: Mapping[str, Any]) -> list[str]:
     maps = _as_dict(company_context.get("maps"))
     improvements: list[str] = []
     if not (bool(website.get("has_cta")) or bool(website.get("has_online_booking"))):
-        improvements.append(_check("adding a clear CTA or booking path should be the next website improvement"))
+        improvements.append(_check("следующим улучшением сайта стоит сделать ясный CTA или путь к записи"))
     if not bool(website.get("has_reviews")):
-        improvements.append(_check("adding visible review or proof blocks on the website would help"))
+        improvements.append(_check("на сайт стоит добавить видимые отзывы, кейсы или другие proof-блоки"))
     if not bool(socials.get("active")):
-        improvements.append(_check("a more regular social publishing rhythm would support trust signals"))
+        improvements.append(_check("регулярный ритм публикаций в соцсетях может поддержать доверие"))
     if not bool(maps.get("has_photos")):
-        improvements.append(_check("map listings need more photos or richer profile content"))
+        improvements.append(_check("карточкам на картах не хватает фото или более полного контента"))
     return improvements
 
 
@@ -242,18 +242,14 @@ def _context_cautions(company_context: Mapping[str, Any]) -> tuple[list[str], li
     missing_sections = _missing_sections(company_context)
     if missing_sections:
         joined = ", ".join(missing_sections)
-        cautions.append(
-            _check(f"the normalized context is missing required top-level sections: {joined}")
-        )
+        cautions.append(_check(f"в нормализованном контексте пока отсутствуют обязательные разделы: {joined}"))
         for section_name in missing_sections:
-            improvements.append(
-                _check(f"the normalized '{section_name}' section should be populated before relying on this score")
-            )
+            improvements.append(_check(f"перед использованием скоринга стоит заполнить раздел '{section_name}'"))
 
     website = _as_dict(company_context.get("website"))
     confidence_value = website.get("confidence")
     if confidence_value is not None and _safe_float(confidence_value) is None:
-        cautions.append(_check("website confidence could not be parsed and was treated as unavailable"))
+        cautions.append(_check("поле confidence сайта не удалось разобрать и оно считается недоступным"))
     return cautions, improvements
 
 

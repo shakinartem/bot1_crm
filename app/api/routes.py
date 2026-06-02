@@ -158,7 +158,10 @@ async def require_bot2_auth(authorization: str | None = Header(default=None)) ->
         return
     expected = f"Bearer {settings.bot2_api_token}"
     if authorization != expected:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid BOT2 API token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid BOT2 API token. Use header: Authorization: Bearer <BOT2_API_KEY>",
+        )
 
 
 @api_router.get("/health")
@@ -1098,6 +1101,12 @@ async def bot2_consultation_ready(
     "/companies/{company_id}/consultation-context",
     response_model=Bot2ConsultationContextRead,
     dependencies=[Depends(require_bot2_auth)],
+    summary="Bot2 consultation context",
+    description=(
+        "Returns the structured consultation context for Bot2.\n\n"
+        "Authorization header format:\n"
+        "Authorization: Bearer <BOT2_API_KEY>"
+    ),
 )
 async def bot2_consultation_context(
     company_id: int,

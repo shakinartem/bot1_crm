@@ -17,7 +17,7 @@ class ServicePackage:
 SERVICE_PACKAGES: dict[str, ServicePackage] = {
     "audit_roadmap": ServicePackage(
         code="audit_roadmap",
-        title="Диагностика digital-воронки",
+        title="Roadmap-аудит digital-воронки",
         price="ориентировочно 5 000–10 000 ₽, точная сумма зависит от объёма",
         items=(
             "разбор сайта/посадочной",
@@ -38,7 +38,7 @@ SERVICE_PACKAGES: dict[str, ServicePackage] = {
     ),
     "landing_start": ServicePackage(
         code="landing_start",
-        title="Посадочная / лендинг",
+        title="Посадочная страница / квиз",
         price="от 35 000 ₽, после диагностики уточняется",
         items=(
             "структура посадочной",
@@ -79,7 +79,7 @@ SERVICE_PACKAGES: dict[str, ServicePackage] = {
     ),
     "smm_funnel": ServicePackage(
         code="smm_funnel",
-        title="Соцсети как воронка",
+        title="SMM как воронка заявок",
         price="от 55 000 ₽/мес за площадку, точная сумма зависит от объёма",
         items=(
             "контент-план",
@@ -101,7 +101,7 @@ SERVICE_PACKAGES: dict[str, ServicePackage] = {
     ),
     "crm_bot": ServicePackage(
         code="crm_bot",
-        title="CRM / AI-бот / Telegram-валидатор",
+        title="CRM / бот для заявок",
         price="ориентировочно от 60 000–80 000 ₽, точная сумма зависит от объёма",
         items=(
             "бот/CRM",

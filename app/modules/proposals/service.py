@@ -103,7 +103,7 @@ async def suggest_packages_for_company(session: AsyncSession, company_id: int) -
                     "audit_roadmap",
                     _make_suggestion(
                         "audit_roadmap",
-                        "Material score shows a weak public-side foundation, so a diagnostic roadmap is the safest first commercial step.",
+                        "Слабый material score показывает, что безопаснее всего начать с диагностического roadmap-а воронки.",
                         "high",
                     ),
                 )
@@ -111,7 +111,7 @@ async def suggest_packages_for_company(session: AsyncSession, company_id: int) -
                     "landing_start",
                     _make_suggestion(
                         "landing_start",
-                        "Material score suggests the entry-point experience is still weak, so strengthening the landing and conversion path looks justified.",
+                        "Material score показывает слабую точку входа, поэтому усиление посадочной страницы и пути к конверсии выглядит оправданно.",
                         "high",
                     ),
                 )
@@ -119,7 +119,7 @@ async def suggest_packages_for_company(session: AsyncSession, company_id: int) -
                     "maps_reputation",
                     _make_suggestion(
                         "maps_reputation",
-                        "A weak material score often means trust and local proof need reinforcing through maps and reputation assets.",
+                        "Слабый material score часто означает, что доверие и локальные сигналы доверия стоит усиливать через карты и репутацию.",
                         "medium",
                     ),
                 )
@@ -128,7 +128,7 @@ async def suggest_packages_for_company(session: AsyncSession, company_id: int) -
                     "audit_roadmap",
                     _make_suggestion(
                         "audit_roadmap",
-                        "Material score suggests there are still a few conversion weak points worth mapping before a larger rollout.",
+                        "Material score подсказывает, что перед более крупным запуском стоит сначала разметить слабые точки конверсии.",
                         "medium",
                     ),
                 )
@@ -137,7 +137,7 @@ async def suggest_packages_for_company(session: AsyncSession, company_id: int) -
                     "smm_funnel",
                     _make_suggestion(
                         "smm_funnel",
-                        "Sales intelligence indicates social proof is still light, so content and nurture channels may deserve attention.",
+                        "Sales intelligence показывает слабое социальное доказательство, поэтому стоит обратить внимание на контент и прогрев.",
                         "medium",
                     ),
                 )
@@ -146,7 +146,7 @@ async def suggest_packages_for_company(session: AsyncSession, company_id: int) -
                     "maps_reputation",
                     _make_suggestion(
                         "maps_reputation",
-                        "Sales intelligence indicates maps visibility or trust signals are still thin, so local reputation work may help first.",
+                        "Sales intelligence показывает слабую видимость на картах или недостаток сигналов доверия, поэтому сначала может помочь локальная репутация.",
                         "medium",
                     ),
                 )
@@ -155,7 +155,7 @@ async def suggest_packages_for_company(session: AsyncSession, company_id: int) -
                     "crm_bot",
                     _make_suggestion(
                         "crm_bot",
-                        "Sales intelligence suggests the path from first interest to follow-up may still be leaking, so CRM automation is worth discussing.",
+                        "Sales intelligence показывает риск потерь между первым интересом и следующим касанием, поэтому есть смысл обсуждать CRM-автоматизацию.",
                         "medium",
                     ),
                 )
@@ -181,7 +181,7 @@ async def suggest_packages_for_company(session: AsyncSession, company_id: int) -
                 "landing_start",
                 _make_suggestion(
                     "landing_start",
-                    "По быстрому research не видно явной записи или callback-формы, поэтому стоит начать с посадочной точки и конверсии сайта.",
+                    "По быстрому исследованию не видно явной записи или формы обратной связи, поэтому стоит начать с посадочной точки и конверсии сайта.",
                     "high",
                 ),
             )
@@ -189,7 +189,7 @@ async def suggest_packages_for_company(session: AsyncSession, company_id: int) -
                 "audit_roadmap",
                 _make_suggestion(
                     "audit_roadmap",
-                    "Research показывает риск потери пациента между сайтом и обращением, поэтому безопасный первый шаг — диагностическая карта воронки.",
+                    "Исследование показывает риск потери пациента между сайтом и обращением, поэтому безопасный первый шаг — диагностическая карта воронки.",
                     "high",
                 ),
             )
@@ -208,7 +208,7 @@ async def suggest_packages_for_company(session: AsyncSession, company_id: int) -
                 "audit_roadmap",
                 _make_suggestion(
                     "audit_roadmap",
-                    "INN-first intelligence показывает риск потери пациента до обращения, поэтому стоит начать с диагностического roadmap.",
+                    "INN-first intelligence показывает риск потери пациента до обращения, поэтому стоит начать с диагностического roadmap-а.",
                     "high",
                 ),
             )
@@ -230,7 +230,7 @@ async def suggest_packages_for_company(session: AsyncSession, company_id: int) -
                 "smm_funnel",
                 _make_suggestion(
                     "smm_funnel",
-                    "Intelligence не нашел явных соцсетей, поэтому полезно проверить прогрев и контентную воронку вне сайта.",
+                    "Intelligence не нашёл явных соцсетей, поэтому полезно проверить прогрев и контентную воронку вне сайта.",
                     "medium",
                 ),
             )
@@ -247,7 +247,7 @@ async def suggest_packages_for_company(session: AsyncSession, company_id: int) -
                 "landing_start",
                 _make_suggestion(
                     "landing_start",
-                    "Имплантация требует сильной упаковки доверия и записи, поэтому landing-first шаг выглядит безопасно.",
+                    "Имплантация требует сильной упаковки доверия и записи, поэтому логично начать с посадочной страницы.",
                     "medium",
                 ),
             )
@@ -256,7 +256,7 @@ async def suggest_packages_for_company(session: AsyncSession, company_id: int) -
                 "crm_bot",
                 _make_suggestion(
                     "crm_bot",
-                    "Intelligence дает гипотезу потери пациента в воронке, поэтому стоит рассмотреть CRM/follow-up автоматизацию.",
+                    "Intelligence даёт гипотезу потери пациента в воронке, поэтому стоит рассмотреть CRM-автоматизацию и следующий каскад касаний.",
                     "medium",
                 ),
             )
@@ -265,7 +265,7 @@ async def suggest_packages_for_company(session: AsyncSession, company_id: int) -
                 "maps_reputation",
                 _make_suggestion(
                     "maps_reputation",
-                    "В research мало сигналов отзывов или карт, поэтому стоит усилить локальное доверие и репутационные точки входа.",
+                    "В исследовании мало сигналов отзывов или карт, поэтому стоит усилить локальное доверие и репутационные точки входа.",
                     "medium",
                 ),
             )
@@ -274,7 +274,7 @@ async def suggest_packages_for_company(session: AsyncSession, company_id: int) -
                 "smm_funnel",
                 _make_suggestion(
                     "smm_funnel",
-                    "В research не обнаружены явные соцсети, поэтому стоит проверить, как клиника прогревает аудиторию вне сайта.",
+                    "В исследовании не обнаружены явные соцсети, поэтому стоит проверить, как клиника прогревает аудиторию вне сайта.",
                     "medium",
                 ),
             )
@@ -292,7 +292,7 @@ async def suggest_packages_for_company(session: AsyncSession, company_id: int) -
                 "crm_bot",
                 _make_suggestion(
                     "crm_bot",
-                    "Research даёт гипотезу потери пациента на пути до обращения, поэтому стоит рассмотреть CRM- и follow-up-автоматизацию.",
+                    "Исследование даёт гипотезу потери пациента на пути до обращения, поэтому стоит рассмотреть CRM-автоматизацию и follow-up процесс.",
                     "medium",
                 ),
             )
@@ -300,7 +300,7 @@ async def suggest_packages_for_company(session: AsyncSession, company_id: int) -
                 "audit_roadmap",
                 _make_suggestion(
                     "audit_roadmap",
-                    "Research указывает на возможные точки потери пациента, поэтому стоит начать с диагностического roadmap.",
+                    "Исследование указывает на возможные точки потери пациента, поэтому стоит начать с диагностического roadmap-а.",
                     "high",
                 ),
             )

@@ -33,11 +33,11 @@ def manual_package_selection_markup(company_id: int, selected_codes: list[str]) 
     rows: list[list[InlineKeyboardButton]] = []
     selected = set(selected_codes)
     short_labels = {
-        "audit_roadmap": "Диагностика",
-        "landing_start": "Лендинг",
+        "audit_roadmap": "Roadmap-аудит",
+        "landing_start": "Посадочная / квиз",
         "maps_reputation": "Карты и репутация",
-        "smm_funnel": "SMM-воронка",
-        "crm_bot": "CRM/бот",
+        "smm_funnel": "SMM как воронка",
+        "crm_bot": "CRM / бот",
         "complex_growth": "Комплекс",
     }
     for code in PACKAGE_ORDER:

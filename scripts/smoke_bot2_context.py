@@ -165,6 +165,9 @@ async def main() -> None:
         with temporary_env(BOT2_API_TOKEN="bot2-token"):
             unauthorized = client.get(f"/api/bot2/companies/{company_id}/consultation-context")
             assert unauthorized.status_code == 401, "context endpoint must require token when BOT2_API_TOKEN is set"
+            assert (
+                unauthorized.json()["detail"] == "Invalid BOT2 API token. Use header: Authorization: Bearer <BOT2_API_KEY>"
+            ), "401 error must explain Authorization header format"
             authorized = client.get(
                 f"/api/bot2/companies/{company_id}/consultation-context",
                 headers={"Authorization": "Bearer bot2-token"},

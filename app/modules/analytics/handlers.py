@@ -31,6 +31,7 @@ router = Router(name="analytics")
 
 
 @router.message(F.text == "📈 Аналитика")
+@router.message(F.text == "📊 Аналитика")
 async def analytics_root(message: Message) -> None:
     await message.answer(_analytics_menu_text(), reply_markup=analytics_menu_markup())
 

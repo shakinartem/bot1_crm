@@ -20,11 +20,42 @@ from app.modules.sales_intelligence.service import (
 
 router = Router(name="sales_intelligence")
 
+GRADE_LABELS = {
+    "weak": "слабый",
+    "basic": "базовый",
+    "normal": "нормальный",
+    "strong": "сильный",
+    "excellent": "отличный",
+}
+
+STATUS_LABELS = {
+    "unknown": "не подтверждено",
+    "weak": "слабо подтверждено",
+    "possible": "частично подтверждено",
+    "strong": "хорошо подтверждено",
+}
+
+CONFIDENCE_LABELS = {
+    "low": "низкая",
+    "medium": "средняя",
+    "high": "высокая",
+}
+
+RECOMMENDED_ORDER_LABELS = {
+    "situation": "Ситуация",
+    "experience": "Опыт",
+    "principles": "Принципы",
+    "solutions": "Решения",
+    "analogies": "Аналогии",
+    "undesired": "Нежелательное",
+    "limitations": "Ограничения",
+}
+
 
 @router.callback_query(F.data.startswith("sales:open:"))
 async def sales_open_menu(callback: CallbackQuery, state: FSMContext) -> None:
     if not callback.message:
-        await callback.answer("Не удалось открыть sales intelligence.", show_alert=True)
+        await callback.answer("Не удалось открыть раздел Sales Intelligence.", show_alert=True)
         return
     company_id = int(callback.data.rsplit(":", 1)[-1])
     async with async_session_factory() as session:
@@ -47,7 +78,7 @@ async def sales_open_menu(callback: CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(F.data.startswith("sales:score:"))
 async def sales_show_score(callback: CallbackQuery) -> None:
     if not callback.message:
-        await callback.answer("Не удалось открыть score.", show_alert=True)
+        await callback.answer("Не удалось открыть оценку материалов.", show_alert=True)
         return
     company_id = int(callback.data.rsplit(":", 1)[-1])
     async with async_session_factory() as session:
@@ -57,7 +88,7 @@ async def sales_show_score(callback: CallbackQuery) -> None:
         [
             "📊 Материалы",
             "",
-            f"Оценка: {score.total_score}/100 ({score.grade})",
+            f"Оценка: {score.total_score}/100 ({GRADE_LABELS.get(score.grade, score.grade)})",
             f"Сайт: {score.website_score}",
             f"Соцсети: {score.socials_score}",
             f"Карты: {score.maps_score}",
@@ -65,11 +96,14 @@ async def sales_show_score(callback: CallbackQuery) -> None:
             f"Конверсия: {score.conversion_score}",
             f"Контакты: {score.contact_score}",
             "",
-            "Почему:",
+            "Сильные стороны:",
             *[f"- {item}" for item in score.reasons[:4]],
             "",
             "Риски:",
             *[f"- {item}" for item in score.risks[:4]],
+            "",
+            "Возможности:",
+            *[f"- {item}" for item in score.opportunities[:4]],
         ]
     )
     await _safe_edit_message(callback.message, text, reply_markup=sales_intelligence_result_markup(company_id))
@@ -79,7 +113,7 @@ async def sales_show_score(callback: CallbackQuery) -> None:
 @router.callback_query(F.data.startswith("sales:closing:"))
 async def sales_show_closing(callback: CallbackQuery) -> None:
     if not callback.message:
-        await callback.answer("Не удалось открыть критерии.", show_alert=True)
+        await callback.answer("Не удалось открыть критерии сделки.", show_alert=True)
         return
     company_id = int(callback.data.rsplit(":", 1)[-1])
     async with async_session_factory() as session:
@@ -91,9 +125,9 @@ async def sales_show_closing(callback: CallbackQuery) -> None:
         ("ЛПР", closing.decision_maker),
         ("Здесь и сейчас", closing.here_and_now),
     ]
-    lines = ["🎯 Критерии закрытия", "", closing.summary, ""]
+    lines = ["🎯 5 критериев сделки", "", closing.summary, ""]
     for title, item in items:
-        lines.append(f"{title}: {item.score}/100 ({item.status})")
+        lines.append(f"{title}: {item.score}/100 ({STATUS_LABELS.get(item.status, item.status)})")
         if item.evidence:
             lines.append(f"- Сигнал: {item.evidence[0]}")
         if item.questions:
@@ -111,7 +145,7 @@ async def sales_show_closing(callback: CallbackQuery) -> None:
 @router.callback_query(F.data.startswith("sales:soprano:"))
 async def sales_show_soprano(callback: CallbackQuery) -> None:
     if not callback.message:
-        await callback.answer("Не удалось открыть SOPRANO.", show_alert=True)
+        await callback.answer("Не удалось открыть вопросы SOPRANO.", show_alert=True)
         return
     company_id = int(callback.data.rsplit(":", 1)[-1])
     async with async_session_factory() as session:
@@ -122,15 +156,15 @@ async def sales_show_soprano(callback: CallbackQuery) -> None:
         soprano.intro,
         "",
         "Рекомендуемый порядок:",
-        *[f"- {item}" for item in soprano.recommended_order],
+        *[f"- {RECOMMENDED_ORDER_LABELS.get(item, item)}" for item in soprano.recommended_order],
         "",
-        "Situation:",
+        "Ситуация:",
         *[f"- {item}" for item in soprano.situation[:2]],
         "",
-        "Experience:",
+        "Опыт:",
         *[f"- {item}" for item in soprano.experience[:2]],
         "",
-        "Principles:",
+        "Принципы:",
         *[f"- {item}" for item in soprano.principles[:2]],
     ]
     await _safe_edit_message(
@@ -144,7 +178,7 @@ async def sales_show_soprano(callback: CallbackQuery) -> None:
 @router.callback_query(F.data.startswith("sales:plan:"))
 async def sales_show_plan(callback: CallbackQuery) -> None:
     if not callback.message:
-        await callback.answer("Не удалось собрать план.", show_alert=True)
+        await callback.answer("Не удалось собрать план звонка.", show_alert=True)
         return
     company_id = int(callback.data.rsplit(":", 1)[-1])
     await _safe_edit_message(callback.message, "Собираю план звонка, это может занять несколько секунд...")
@@ -153,8 +187,8 @@ async def sales_show_plan(callback: CallbackQuery) -> None:
     lines = [
         "📞 План звонка",
         "",
-        f"Режим: {plan.generation_mode}",
-        f"Уверенность: {plan.confidence}",
+        f"Режим: {'AI' if plan.generation_mode == 'ai' else 'локальный fallback'}",
+        f"Уверенность: {CONFIDENCE_LABELS.get(plan.confidence, plan.confidence)}",
         f"Цель: {plan.call_goal}",
         "",
         f"Причина звонка: {plan.reason_for_call}",
@@ -185,4 +219,3 @@ async def _safe_edit_message(
         if "message is not modified" not in str(exc):
             raise
         await message.edit_reply_markup(reply_markup=reply_markup)
-

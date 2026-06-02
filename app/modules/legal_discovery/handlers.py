@@ -9,7 +9,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import BufferedInputFile, CallbackQuery, Message
 
-from app.config import get_settings
 from app.database import async_session_factory
 from app.modules.crm.keyboards import CANCEL_TEXT, flow_menu, main_menu
 from app.modules.legal_discovery.keyboards import (
@@ -33,8 +32,12 @@ class DiscoveryStates(StatesGroup):
 @router.message(F.text == "/legal_discovery")
 async def discovery_start(message: Message, state: FSMContext) -> None:
     await state.clear()
-    await message.answer("🔍 Поиск компаний\n\nВыберите источник:", reply_markup=None)
-    await message.answer("Доступные источники:", reply_markup=discovery_provider_markup())
+    await message.answer(
+        "🔍 Поиск компаний\n\n"
+        "Дальше пойдём по существующему legal discovery flow:\n"
+        "источник → ОКВЭД → регион → лимит → preview → import.",
+    )
+    await message.answer("Выберите источник:", reply_markup=discovery_provider_markup())
 
 
 @router.callback_query(F.data.startswith("discovery:provider:"))
@@ -43,7 +46,7 @@ async def discovery_pick_provider(callback: CallbackQuery, state: FSMContext) ->
         return
     provider = callback.data.rsplit(":", 1)[-1]
     await state.update_data(discovery_provider=provider)
-    await _safe_edit_message(callback.message, "Выберите нишу:", reply_markup=discovery_niche_markup())
+    await _safe_edit_message(callback.message, "Выберите ОКВЭД или нишу:", reply_markup=discovery_niche_markup())
     await callback.answer()
 
 
@@ -54,7 +57,7 @@ async def discovery_pick_niche(callback: CallbackQuery, state: FSMContext) -> No
     niche = callback.data.split(":", 2)[-1]
     if niche == "manual":
         await state.set_state(DiscoveryStates.niche_manual)
-        await callback.message.answer("Введите нишу вручную.", reply_markup=flow_menu())
+        await callback.message.answer("Введите ОКВЭД или нишу вручную.", reply_markup=flow_menu())
         await callback.answer()
         return
     await state.update_data(discovery_query=niche)
@@ -83,7 +86,7 @@ async def discovery_city_input(message: Message, state: FSMContext) -> None:
     raw = (message.text or "").strip()
     await state.update_data(discovery_city=raw, discovery_region=None)
     await state.set_state(None)
-    await message.answer("Выберите лимит выдачи.", reply_markup=None)
+    await message.answer("Выберите лимит выдачи.")
     await message.answer("Лимит:", reply_markup=discovery_limit_markup())
 
 
@@ -180,8 +183,8 @@ def _render_preview(preview) -> str:
         f"Найдено юрлиц: {preview.total_found}",
         f"Активных: {preview.active_count}",
         f"Неактивных: {preview.inactive_count}",
-        f"Новые для CRM: {preview.new_count}",
-        f"Дубли в CRM: {preview.duplicate_count}",
+        f"Новых для CRM: {preview.new_count}",
+        f"Дублей в CRM: {preview.duplicate_count}",
         f"Слабые данные: {preview.weak_count}",
         "",
         "Первые результаты:",

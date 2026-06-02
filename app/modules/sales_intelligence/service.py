@@ -50,7 +50,7 @@ _DENTAL_KEYWORDS = (
     "dentistry",
 )
 _SALES_INSIGHT_TYPE = "sales_intelligence"
-_SALES_INSIGHT_TITLE = "Sales intelligence / cold call plan"
+_SALES_INSIGHT_TITLE = "Sales Intelligence / план звонка"
 _SALES_INSIGHT_SOURCE = "sales_intelligence"
 
 
@@ -226,13 +226,11 @@ def build_fallback_cold_call_plan(
     observations = _build_digital_observations(company_context, material_score)
     likely_pains = _build_likely_pains(material_score, closing_criteria)
     personalization_points = _build_personalization_points(company_context, material_score)
-    first_offer = (
-        "Offer a short diagnostic working session to map where enquiries may be slowing down before they become booked patients."
-    )
+    first_offer = "Предложить короткую диагностическую сессию, чтобы понять, где заявки замедляются до записи."
     next_best_action = (
-        f"Use the next call to confirm {closing_criteria.next_best_question.lower().rstrip('?')}."
+        f"На следующем касании подтвердить: {closing_criteria.next_best_question.lower().rstrip('?')}."
         if closing_criteria.next_best_question
-        else "Use the next call to confirm whether a deeper diagnostic conversation is worth scheduling."
+        else "На следующем касании подтвердить, есть ли смысл выходить на более глубокую диагностику."
     )
     short_script = _build_short_script(
         company_name=company_name,
@@ -257,12 +255,12 @@ def build_fallback_cold_call_plan(
         confidence=_plan_confidence(material_score, closing_criteria),
         created_at=datetime.utcnow(),
         call_goal=(
-            "Confirm whether the company may be losing demand between first interest and the booked next step,"
-            " then earn permission for a short diagnostic follow-up."
+            "Понять, теряет ли компания спрос между первым интересом и следующим целевым шагом,"
+            " а затем мягко вывести разговор к короткой диагностике."
         ),
         opener=(
-            f"Hi, am I speaking with the person who looks after growth for {company_name}? "
-            "I am calling with one cautious hypothesis from the public side and wanted to sanity-check it with you."
+            f"Добрый день. Подскажите, пожалуйста, я говорю с человеком, который отвечает за рост и привлечение в {company_name}? "
+            "Звоню с аккуратной гипотезой по публичной digital-стороне и хотел бы быстро сверить её с вами."
         ),
         reason_for_call=_reason_for_call(material_score, observations),
         personalization_points=personalization_points,
@@ -277,25 +275,25 @@ def build_fallback_cold_call_plan(
         call_script_detailed=detailed_script,
         copyable_short_script=short_script,
         manager_checklist=[
-            "Open the website, maps listing, and the latest notes before calling.",
-            "Confirm whether you reached a decision-maker or a gatekeeper within the first minute.",
-            "Ask one closing-criteria question before offering any solution.",
-            "Keep every observation framed as a public-side hypothesis, not a certainty.",
-            "Leave the call with either a booked follow-up or a clearly stated reason why it is not timely.",
+            "Перед звонком откройте сайт, карточки на картах и последние заметки по компании.",
+            "В первую минуту уточните, вышли ли вы на ЛПР или пока общаетесь через фильтр.",
+            "До любого оффера задайте хотя бы один вопрос из 5 критериев сделки.",
+            "Все наблюдения формулируйте как гипотезу по публичной стороне, а не как установленный факт.",
+            "Завершайте звонок либо договорённостью о следующем шаге, либо понятной причиной, почему сейчас не время.",
         ],
         risks=_dedupe_preserve_order(
             [
                 *material_score.risks[:4],
                 *closing_criteria.risks[:4],
-                "Public signals can be incomplete, so the manager should validate each hypothesis live on the call.",
+                "Публичные сигналы могут быть неполными, поэтому каждую гипотезу нужно проверять прямо в разговоре.",
             ]
         ),
         do_not_say=[
-            "We know exactly where you are losing patients.",
-            "Your website is broken.",
-            "You definitely need a new contractor.",
-            "We can guarantee more revenue.",
-            "I already know your budget and internal process.",
+            "Мы точно знаем, где вы теряете пациентов.",
+            "У вас сломан сайт.",
+            "Вам срочно нужен новый подрядчик.",
+            "Мы гарантируем рост выручки.",
+            "Я уже понимаю ваш бюджет и внутренний процесс.",
         ],
     )
 
@@ -395,9 +393,9 @@ async def _persist_sales_intelligence_snapshot(
 ) -> None:
     saved_at = datetime.utcnow()
     summary = (
-        f"Material score: {material_score.total_score}/100 ({material_score.grade}). "
-        f"First offer: {cold_call_plan.first_offer}. "
-        f"Mode: {cold_call_plan.generation_mode}."
+        f"Оценка материалов: {material_score.total_score}/100 ({material_score.grade}). "
+        f"Первый оффер: {cold_call_plan.first_offer}. "
+        f"Режим: {cold_call_plan.generation_mode}."
     )
     payload = {
         "material_score": material_score.model_dump(mode="json"),
@@ -431,7 +429,7 @@ async def _save_sales_intelligence_note(
     company_id: int,
     summary: str,
 ) -> None:
-    note_text = f"Cold call plan saved. {summary}"
+    note_text = f"План звонка сохранён. {summary}"
     latest_note = await session.scalar(
         select(LeadInteraction)
         .where(
@@ -481,27 +479,27 @@ def _build_closing_criteria_from_context(
     if company_context.get("niche_detected") in {"dentistry", "medical"}:
         financial_score += 20
         financial_evidence.append(
-            "The company appears to operate in a service category where even modest conversion gains could matter commercially."
+            "Компания работает в сервисной нише, где даже умеренный рост конверсии может заметно влиять на выручку."
         )
     if material_score.total_score >= 55:
         financial_score += 20
         financial_evidence.append(
-            "The public footprint looks substantial enough that a structured growth conversation may be commercially relevant."
+            "Публичная digital-упаковка уже достаточно развита, чтобы разговор о росте выглядел предметным."
         )
     if company.get("priority") == "high":
         financial_score += 15
         financial_evidence.append(
-            "The lead is already marked high priority internally, which may justify a revenue-focused conversation."
+            "Лид уже отмечен как приоритетный внутри CRM, значит разговор о коммерческом эффекте уместен."
         )
     if "budget" in text_haystack or "marketing weekly" in text_haystack:
         financial_score += 20
         financial_evidence.append(
-            "Notes suggest commercial performance or marketing spend may already be discussed internally."
+            "По заметкам видно, что внутри уже обсуждаются маркетинг, загрузка или коммерческий результат."
         )
     financial_questions.extend(
         [
-            "If new-patient conversion improved even slightly, what would that be worth to the business over a month?",
-            "Which services matter most commercially when your schedule is not full enough?",
+            "Если конверсия в новых пациентов немного вырастет, что это даст бизнесу за месяц?",
+            "Какие услуги для вас наиболее коммерчески важны, когда загрузка проседает?",
         ]
     )
     financial_opportunity = _criterion_from_score(financial_score, financial_evidence, financial_questions)
@@ -512,27 +510,27 @@ def _build_closing_criteria_from_context(
     if any(marker in text_haystack for marker in ("loses demand", "losing demand", "uneven", "inquiry", "lead")):
         need_score += 35
         need_evidence.append(
-            "Existing notes already hint that demand may become uneven or leak after the first enquiry."
+            "В заметках уже есть сигналы, что спрос может теряться или проседать после первого обращения."
         )
     if material_score.conversion_score < 60:
         need_score += 20
         need_evidence.append(
-            "The public conversion path still looks incomplete enough that there may be a real underlying growth need."
+            "Путь к записи на публичной стороне выглядит недособранным, значит потребность может быть реальной, а не формальной."
         )
     if open_tasks:
         need_score += 15
         need_evidence.append(
-            "There is already an open follow-up task around a diagnostic conversation, which suggests some need may have been recognized."
+            "У команды уже стоит открытая задача на follow-up, значит часть потребности, вероятно, уже признана."
         )
     if recent_interactions:
         need_score += 10
         need_evidence.append(
-            "Recent conversations suggest the account is active enough to test whether the need is explicit yet."
+            "Недавние касания показывают, что аккаунт ещё живой и гипотезу можно аккуратно проверять в диалоге."
         )
     need_questions.extend(
         [
-            "Where do you feel new-patient demand slows down most today: traffic, first contact, or booked appointment?",
-            "What has already prompted you to look at this area now, if anything?",
+            "Где сейчас сильнее всего замедляется путь до нового пациента: трафик, первый контакт или запись?",
+            "Что уже подтолкнуло вас смотреть в эту сторону именно сейчас, если такой повод есть?",
         ]
     )
     conscious_need = _criterion_from_score(need_score, need_evidence, need_questions)
@@ -543,27 +541,27 @@ def _build_closing_criteria_from_context(
     if material_score.trust_score >= 70:
         trust_score += 35
         trust_evidence.append(
-            "The public presence already shows several trust markers, which may make a consultative conversation easier."
+            "На публичной стороне уже видны несколько сигналов доверия, поэтому заход через консультацию выглядит естественнее."
         )
     if recent_interactions:
         trust_score += 15
         trust_evidence.append(
-            "Someone at the company has already engaged at least once, which may lower initial resistance."
+            "С компанией уже был хотя бы один контакт, а значит первый барьер сопротивления ниже."
         )
     if trust_signals.get("has_decision_maker"):
         trust_score += 10
         trust_evidence.append(
-            "A named decision-maker is available, which can make trust-building more direct."
+            "В CRM уже есть ЛПР, поэтому разговор о доверии можно вести не вслепую."
         )
     if company.get("rating") and company.get("rating") >= 4:
         trust_score += 10
         trust_evidence.append(
-            "A solid public rating may help anchor the conversation around protecting an already credible brand."
+            "Хороший публичный рейтинг позволяет говорить не о спасении, а об усилении уже достойной репутации."
         )
     trust_questions.extend(
         [
-            "When you evaluate outside help, what proof or process usually makes it credible enough to continue the conversation?",
-            "Have you already tried to improve this area with someone else, and what felt missing?",
+            "Когда вы оцениваете внешнюю помощь, какие доказательства или процесс делают её для вас достаточно надёжной?",
+            "Пробовали ли вы уже усиливать это направление с кем-то ещё, и чего тогда не хватило?",
         ]
     )
     trust = _criterion_from_score(trust_score, trust_evidence, trust_questions)
@@ -574,28 +572,28 @@ def _build_closing_criteria_from_context(
     if decision_makers:
         dm_score += 45
         dm_evidence.append(
-            "A named decision-maker is already attached to the company record."
+            "В карточке уже указан конкретный ЛПР."
         )
         primary_dm = next((item for item in decision_makers if item.get("is_primary")), decision_makers[0])
         if primary_dm.get("role"):
             dm_score += 20
             dm_evidence.append(
-                f"The primary contact is marked as {primary_dm['role']}, which may indicate real decision influence."
+                f"Основной контакт отмечен как {primary_dm['role']}, а значит влияние на решение может быть прямым."
             )
         if primary_dm.get("phone") or primary_dm.get("email") or primary_dm.get("telegram"):
             dm_score += 10
             dm_evidence.append(
-                "There is at least one direct path to the likely decision-maker."
+                "Есть хотя бы один прямой канал до вероятного ЛПР."
             )
     if "owner" in text_haystack or "director" in text_haystack:
         dm_score += 10
         dm_evidence.append(
-            "Interaction notes suggest ownership or senior leadership may already be involved."
+            "В заметках видно, что в разговор может быть уже вовлечён собственник или руководитель."
         )
     dm_questions.extend(
         [
-            "Who usually decides whether a digital growth issue is important enough to act on?",
-            "If this does look relevant, who would want to see the diagnostic findings with you?",
+            "Кто обычно принимает решение, стоит ли вообще что-то менять в digital-воронке?",
+            "Если гипотеза окажется релевантной, кто ещё должен посмотреть результаты диагностики вместе с вами?",
         ]
     )
     decision_maker = _criterion_from_score(dm_score, dm_evidence, dm_questions)
@@ -606,27 +604,27 @@ def _build_closing_criteria_from_context(
     if company.get("status") in {"interested", "consultation_planned", "proposal_sent"}:
         timing_score += 30
         timing_evidence.append(
-            "The current CRM status suggests the conversation may already be warm enough for a timely next step."
+            "Текущий статус в CRM показывает, что разговор уже достаточно тёплый для следующего шага."
         )
     if recent_interactions:
         timing_score += 15
         timing_evidence.append(
-            "Recent activity means the account is not dormant."
+            "Недавняя активность подтверждает, что лид не завис без движения."
         )
     if open_tasks:
         timing_score += 15
         timing_evidence.append(
-            "There is an open follow-up task, so the team already has a reason to continue the conversation now."
+            "Есть открытая follow-up задача, значит у команды уже есть повод продолжать разговор сейчас."
         )
     if website.get("has_online_booking") or website.get("has_cta"):
         timing_score += 10
         timing_evidence.append(
-            "The company appears to care about enquiries now, which makes a conversion discussion more timely."
+            "На сайте есть запись или CTA, значит компания уже думает о заявках и тема конверсии своевременна."
         )
     timing_questions.extend(
         [
-            "Why is this worth looking at now rather than in a later quarter?",
-            "Is there any campaign, seasonality, or capacity issue making this more urgent right now?",
+            "Почему в эту тему имеет смысл смотреть сейчас, а не переносить на потом?",
+            "Есть ли сейчас сезонность, кампания или вопрос загрузки, который делает это более срочным?",
         ]
     )
     here_and_now = _criterion_from_score(timing_score, timing_evidence, timing_questions)
@@ -670,15 +668,15 @@ def _build_soprano_questions_from_context(
     company = company_context["company"]
     niche_detected = niche or company_context.get("niche_detected")
     niche_confidence = company_context.get("niche_confidence")
-    niche_label = niche_detected or "generic services"
+    niche_label = niche_detected or "общей сервисной ниши"
     return SopranoQuestionSet(
         company_id=int(company["id"]),
         niche=niche,
         niche_detected=niche_detected,
         niche_confidence=niche_confidence,
         intro=(
-            "Use a calm consultative tone and move from current reality to desired outcomes. "
-            f"Keep the questions relevant to {niche_label} without assuming facts that have not been confirmed."
+            "Держите спокойный консультационный тон и двигайтесь от текущей реальности к желаемому результату. "
+            f"Вопросы должны быть уместны для ниши {niche_label}, но без предположений, которые ещё не подтверждены."
         ),
         situation=_soprano_situation_questions(niche_detected),
         experience=_soprano_experience_questions(niche_detected),
@@ -1118,41 +1116,52 @@ def _criterion_from_score(
 
 
 def _build_closing_summary(criteria_map: dict[str, ClosingCriterionReadiness]) -> str:
-    stronger = [name.replace("_", " ") for name, item in criteria_map.items() if item.status == "strong"]
-    weaker = [name.replace("_", " ") for name, item in criteria_map.items() if item.status in {"unknown", "weak"}]
+    label_map = {
+        "financial_opportunity": "финансовой возможности",
+        "conscious_need": "осознанной потребности",
+        "trust": "доверия",
+        "decision_maker": "ЛПР",
+        "here_and_now": "критерия «здесь и сейчас»",
+    }
+    stronger = [label_map[name] for name, item in criteria_map.items() if item.status == "strong"]
+    weaker = [label_map[name] for name, item in criteria_map.items() if item.status in {"unknown", "weak"}]
     if stronger and weaker:
         return (
-            f"Signals look relatively stronger around {', '.join(stronger[:2])}, "
-            f"but the next conversation should still confirm {', '.join(weaker[:2])} before moving too quickly."
+            f"Сигналы сильнее всего выглядят в зоне {', '.join(stronger[:2])}, "
+            f"но в следующем разговоре важно отдельно подтвердить {', '.join(weaker[:2])}, прежде чем ускорять сделку."
         )
     if stronger:
         return (
-            f"Several signals already support the conversation, especially around {', '.join(stronger[:2])}, "
-            "though the manager should still validate them live."
+            f"Несколько критериев уже поддерживают разговор, особенно в части {', '.join(stronger[:2])}, "
+            "но менеджеру всё равно важно подтвердить это вживую."
         )
     return (
-        "The available evidence is still partial, so the manager should treat this as a discovery-first call and confirm the basics before pitching."
+        "Данных пока недостаточно, поэтому звонок лучше вести как discovery-разговор и сначала подтвердить базовые вводные."
     )
 
 
 def _build_closing_risks(criteria_map: dict[str, ClosingCriterionReadiness]) -> list[str]:
+    label_map = {
+        "financial_opportunity": "финансовой возможности",
+        "conscious_need": "осознанной потребности",
+        "trust": "доверия",
+        "decision_maker": "ЛПР",
+        "here_and_now": "срочности",
+    }
     risks: list[str] = []
     for name, criterion in criteria_map.items():
         if criterion.status in {"unknown", "weak"}:
-            label = name.replace("_", " ")
-            risks.append(
-                f"The call still lacks strong confirmation around {label}, so that area should be explored directly."
-            )
+            risks.append(f"В разговоре пока не хватает уверенного подтверждения по части {label_map[name]}, поэтому этот блок нужно исследовать напрямую.")
     return risks[:5]
 
 
 def _default_question_for_criterion(name: str) -> str:
     mapping = {
-        "financial_opportunity": "If this area improved, what would the commercial impact likely look like for you?",
-        "conscious_need": "What is making this issue worth discussing now, if anything?",
-        "trust": "What would you need to see from an outside partner before continuing the conversation?",
-        "decision_maker": "Who would need to agree before this could move forward?",
-        "here_and_now": "Why is this worth looking at now rather than later?",
+        "financial_opportunity": "Если здесь получится улучшение, как это коммерчески отразится на вас?",
+        "conscious_need": "Что делает эту тему достойной обсуждения именно сейчас?",
+        "trust": "Что вам нужно увидеть от внешнего подрядчика, чтобы продолжить разговор?",
+        "decision_maker": "Кто ещё должен согласовать следующий шаг, если тема подтвердится?",
+        "here_and_now": "Почему это имеет смысл разбирать сейчас, а не позже?",
     }
     return mapping[name]
 
@@ -1160,72 +1169,72 @@ def _default_question_for_criterion(name: str) -> str:
 def _soprano_situation_questions(niche: str | None) -> list[str]:
     if niche == "dentistry":
         return [
-            "How does a new patient usually move from first enquiry to a confirmed appointment today?",
-            "Which channels currently bring the most first-time dental enquiries?",
-            "Where do online booking and receptionist handoff fit into that flow right now?",
+            "Как сейчас новый пациент проходит путь от первого обращения до подтверждённой записи?",
+            "Через какие каналы чаще всего приходят первичные обращения по стоматологии?",
+            "Как сейчас в этот путь встроены онлайн-запись и передача обращения администратору?",
         ]
     return [
-        "How does a new prospect usually move from first enquiry to a booked next step today?",
-        "Which channels bring the most relevant inbound opportunities right now?",
-        "What does the first-contact workflow look like from the customer side?",
+        "Как сейчас новый лид проходит путь от первого обращения до следующего целевого шага?",
+        "Какие каналы сейчас приносят вам самые релевантные входящие обращения?",
+        "Как выглядит первый контакт с вашей стороны глазами клиента?",
     ]
 
 
 def _soprano_experience_questions(niche: str | None) -> list[str]:
     if niche == "dentistry":
         return [
-            "When demand is strong, where does the patient journey feel smooth, and where does it start to strain?",
-            "What have you already tried to improve bookings or reduce drop-off?",
-            "Which services tend to expose the biggest conversion bottlenecks?",
+            "Когда спрос высокий, на каком этапе путь пациента идёт гладко, а где начинает проседать?",
+            "Что вы уже пробовали, чтобы улучшить запись или сократить потери после обращения?",
+            "На каких услугах сильнее всего проявляются узкие места в конверсии?",
         ]
     return [
-        "When demand is healthy, what part of the journey works best today?",
-        "What have you already tried to improve conversion or follow-up?",
-        "Which part of the funnel feels most inconsistent from month to month?",
+        "Когда спрос в порядке, какая часть пути работает у вас лучше всего?",
+        "Что вы уже пробовали, чтобы усилить конверсию или follow-up?",
+        "Какая часть воронки сильнее всего плавает от месяца к месяцу?",
     ]
 
 
 def _soprano_principles_questions() -> list[str]:
     return [
-        "When you evaluate growth work, what principles matter most: speed, predictability, control, or something else?",
-        "What has to stay true about your customer experience even if you improve volume?",
-        "How do you usually decide whether a marketing or conversion change is worth continuing?",
+        "Что для вас важнее всего в росте: скорость, предсказуемость, контроль или что-то ещё?",
+        "Что в клиентском опыте должно остаться неизменным, даже если поток обращений вырастет?",
+        "По каким признакам вы обычно понимаете, что маркетинговое или конверсионное изменение стоит продолжать?",
     ]
 
 
 def _soprano_solution_questions() -> list[str]:
     return [
-        "If this issue were solved well enough, what would you want to see change first?",
-        "What kind of first step would feel useful without becoming a large commitment too early?",
-        "Which team members would need a practical role if you decided to test improvements here?",
+        "Если бы эту задачу удалось решить достаточно хорошо, что вы хотели бы увидеть в первую очередь?",
+        "Какой первый шаг был бы для вас полезным, но не выглядел бы слишком большим обязательством?",
+        "Кто из команды должен быть вовлечён, если вы решите протестировать улучшения?",
     ]
 
 
 def _soprano_analogy_questions(niche: str | None) -> list[str]:
     if niche == "dentistry":
         return [
-            "Have you seen another clinic handle first-contact conversion in a way you respect?",
-            "If your patient journey felt as reliable as your best clinical process, what would be different?",
+            "Есть ли клиника, чья подача и путь до записи вам действительно нравятся?",
+            "Если бы путь пациента работал так же надёжно, как ваш лучший клинический процесс, что было бы иначе?",
         ]
     return [
-        "Have you seen another business handle first-contact conversion in a way that impressed you?",
-        "If this part of the funnel worked as reliably as your strongest internal process, what would be different?",
+        "Есть ли компания или конкурент, чья подача и первый контакт вам нравятся?",
+        "Если бы этот участок воронки работал так же надёжно, как ваш самый сильный внутренний процесс, что было бы иначе?",
     ]
 
 
 def _soprano_undesired_questions() -> list[str]:
     return [
-        "What kind of growth effort would you want to avoid because it creates noise without quality?",
-        "What would make an outside agency conversation feel unhelpful or premature?",
-        "Which outcomes would tell you a change is heading in the wrong direction?",
+        "Каких действий в маркетинге вы точно не хотите, потому что они дают шум без качества?",
+        "Что сделало бы разговор с внешним агентством для вас преждевременным или бесполезным?",
+        "По каким признакам вы бы поняли, что изменение идёт не туда?",
     ]
 
 
 def _soprano_limitation_questions() -> list[str]:
     return [
-        "What constraints should we know about: time, approvals, staffing, or systems?",
-        "Where does the team usually run out of capacity when demand rises?",
-        "What would make it hard to act even if we agreed there was a clear opportunity?",
+        "Какие ограничения нам важно учитывать: сроки, согласования, команда, системы?",
+        "Где у команды обычно заканчивается ресурс, когда спрос растёт?",
+        "Что помешает действовать, даже если мы вместе увидим понятную возможность?",
     ]
 
 
@@ -1238,19 +1247,19 @@ def _build_digital_observations(
     maps = company_context["scoring_context"]["maps"]
     observations: list[str] = []
     if website.get("url"):
-        observations.append("The company appears to maintain a public website that can anchor the conversation.")
+        observations.append("У компании есть публичный сайт, на который можно опереться в разговоре.")
     if website.get("has_online_booking"):
-        observations.append("Online booking appears to be available, which suggests the team already values a digital conversion path.")
+        observations.append("На сайте, похоже, есть онлайн-запись, а значит команда уже ценит digital-путь до обращения.")
     if website.get("has_reviews"):
-        observations.append("Reviews seem visible on the public side, which may already support baseline trust.")
+        observations.append("На публичной стороне видны отзывы, и это уже поддерживает базовое доверие.")
     if maps.get("has_listing"):
-        observations.append("A maps listing appears to exist, so local-intent demand may already be present.")
+        observations.append("У компании есть карточки на картах, значит локальный спрос уже может быть заметным.")
     if company.get("reviews_count"):
         observations.append(
-            f"The public profile shows roughly {company['reviews_count']} reviews, which may indicate meaningful discovery volume."
+            f"На публичной стороне видно около {company['reviews_count']} отзывов, что может говорить о заметном объёме первичного спроса."
         )
     if material_score.conversion_score < 60:
-        observations.append("Even with visible assets, the next step may still be less explicit than it could be.")
+        observations.append("Даже при наличии цифровых активов следующий шаг для клиента может быть недостаточно явным.")
     return observations[:5]
 
 
@@ -1260,15 +1269,15 @@ def _build_likely_pains(
 ) -> list[str]:
     pains: list[str] = []
     if material_score.conversion_score < 60:
-        pains.append("The business may still be losing some enquiries between first visit and booked next step.")
+        pains.append("Компания может терять часть обращений между первым визитом и следующим целевым действием.")
     if material_score.socials_score < 50:
-        pains.append("Social proof and ongoing nurture may not be reinforcing trust consistently enough yet.")
+        pains.append("Соцдоказательства и прогрев пока могут недостаточно стабильно усиливать доверие.")
     if material_score.trust_score < 70:
-        pains.append("Some trust signals may still need to work harder before a prospect feels ready to commit.")
+        pains.append("Часть сигналов доверия пока может не дотягивать до уверенного решения клиента.")
     if closing_criteria.decision_maker.status in {"unknown", "weak"}:
-        pains.append("The buying path may still be unclear, which can slow good conversations down.")
+        pains.append("Путь к решению пока не до конца ясен, а это тормозит даже хороший разговор.")
     if closing_criteria.here_and_now.status in {"unknown", "weak"}:
-        pains.append("The urgency to act may not be explicit yet, even if the opportunity is real.")
+        pains.append("Даже если возможность реальна, срочность действий пока может быть не сформулирована.")
     return pains[:5]
 
 
@@ -1281,51 +1290,51 @@ def _build_personalization_points(
     points: list[str] = []
     if decision_makers:
         primary_dm = next((item for item in decision_makers if item.get("is_primary")), decision_makers[0])
-        role_text = primary_dm.get("role") or "the growth lead"
-        points.append(f"A named decision-maker is present in CRM: {primary_dm['full_name']} ({role_text}).")
+        role_text = primary_dm.get("role") or "ответственный за рост"
+        points.append(f"В CRM уже есть ЛПР: {primary_dm['full_name']} ({role_text}).")
     if company.get("rating"):
         points.append(
-            f"The public rating looks to be about {company['rating']}, so the discussion can focus on protecting existing trust while improving conversion."
+            f"Публичный рейтинг около {company['rating']}, поэтому разговор можно строить вокруг усиления уже существующего доверия."
         )
     if company.get("website"):
-        points.append("The public website gives enough context to frame the call as an informed diagnostic rather than a blind pitch.")
+        points.append("Сайт даёт достаточно контекста, чтобы звонок звучал как подготовленная диагностика, а не слепой pitch.")
     if material_score.total_score >= 55:
-        points.append("The footprint looks developed enough that small funnel fixes could matter more than rebuilding everything.")
+        points.append("Digital-след уже достаточно развит, поэтому точечные улучшения воронки могут быть важнее полного переделывания.")
     if company_context.get("recent_interactions"):
-        points.append("Recent CRM activity means the call can reference live internal context instead of starting from zero.")
+        points.append("Недавняя активность в CRM позволяет опираться на живой контекст, а не начинать разговор с нуля.")
     return points[:5]
 
 
 def _reason_for_call(material_score: SalesMaterialScore, observations: list[str]) -> str:
     if material_score.conversion_score < 60:
         return (
-            "From the public side, the company already appears to have real digital activity, but there may still be friction between first interest and the booked next step."
+            "По публичной стороне видно, что digital-активность уже есть, но между первым интересом и следующим шагом может оставаться трение."
         )
     if observations:
         return (
-            "From the public side, the company appears to have enough digital activity to justify a quick diagnostic conversation about where growth could still be constrained."
+            "По публичной стороне компания выглядит достаточно активной, чтобы предметно обсудить, где рост ещё может упираться в ограничения."
         )
     return (
-        "The call is to test a cautious hypothesis that the company may have a few avoidable leaks in the path from first interest to real opportunity."
+        "Цель звонка — аккуратно проверить гипотезу, что на пути от первого интереса до реальной возможности есть устранимые потери."
     )
 
 
 def _build_objection_preparation() -> list[ObjectionHandlingItem]:
     return [
         ObjectionHandlingItem(
-            objection="We already work with someone.",
-            response_principle="Do not attack the incumbent; position the conversation as a second set of eyes on conversion friction.",
-            suggested_response="That makes sense. I am not assuming anything is broken. Sometimes a short outside diagnostic just helps confirm whether the current setup is already doing enough or whether there is one bottleneck worth fixing.",
+            objection="Мы уже работаем с кем-то.",
+            response_principle="Не спорить с текущим подрядчиком, а позиционировать разговор как второй взгляд на точки потери воронки.",
+            suggested_response="Понимаю. Я не исхожу из того, что у вас что-то сломано. Иногда короткая внешняя диагностика просто помогает подтвердить, что текущая система уже достаточна, или найти одно узкое место, которое действительно стоит поправить.",
         ),
         ObjectionHandlingItem(
-            objection="Send something by message first.",
-            response_principle="Agree, but keep the ask small and specific so the follow-up has context.",
-            suggested_response="Happy to. Before I send anything broad, could I confirm one thing about how enquiries are handled now, so the note is actually relevant to your team?",
+            objection="Сначала пришлите что-нибудь сообщением.",
+            response_principle="Согласиться, но оставить маленький уточняющий вопрос, чтобы follow-up был релевантным.",
+            suggested_response="Конечно. Прежде чем отправлять общий материал, можно я уточню один момент по тому, как у вас сейчас обрабатываются обращения, чтобы сообщение было действительно полезным?",
         ),
         ObjectionHandlingItem(
-            objection="We do not have time right now.",
-            response_principle="Acknowledge the timing issue and offer a lower-friction next step.",
-            suggested_response="Understood. If a full conversation is not timely, would a short diagnostic summary be more useful so you can decide later whether it is worth revisiting?",
+            objection="Сейчас нет времени.",
+            response_principle="Признать вопрос тайминга и предложить более лёгкий следующий шаг.",
+            suggested_response="Понимаю. Если на полноценный разговор сейчас нет окна, был бы полезен короткий диагностический summary, чтобы позже спокойно решить, стоит ли возвращаться к теме?",
         ),
     ]
 
@@ -1360,10 +1369,10 @@ def _build_short_script(
     first_offer: str,
 ) -> str:
     return (
-        f"Hi, I am calling about {company_name}. "
-        f"From the public side, {reason_for_call.lower()} "
-        f"Could I ask one quick question: {next_question} "
-        f"If that is relevant, I would suggest {first_offer.lower()}"
+        f"Добрый день. Звоню по компании {company_name}. "
+        f"По публичной стороне вижу такую гипотезу: {reason_for_call.lower()} "
+        f"Можно задам один короткий вопрос: {next_question} "
+        f"Если это откликается, следующим шагом предложил бы {first_offer.lower()}"
     )
 
 
@@ -1375,7 +1384,7 @@ def _build_detailed_script(
     first_offer: str,
     soprano_questions: SopranoQuestionSet,
 ) -> str:
-    observation_line = observations[0] if observations else "There may be a few public-side signals worth validating together."
+    observation_line = observations[0] if observations else "Есть несколько публичных сигналов, которые стоит спокойно проверить вместе."
     soprano_question = (
         soprano_questions.situation[0]
         if soprano_questions.situation
@@ -1383,12 +1392,12 @@ def _build_detailed_script(
     )
     return "\n".join(
         [
-            f"1. Open gently: mention {company_name} and state that you are calling with a cautious public-side hypothesis.",
-            f"2. Observation: {observation_line}",
-            f"3. Discovery question: {soprano_question}",
-            f"4. Priority closing question: {closing_criteria.next_best_question}",
-            f"5. If the issue sounds real, offer this next step: {first_offer}",
-            "6. If the prospect is unsure, suggest sending a short diagnostic summary instead of forcing a meeting.",
+            f"1. Мягкий вход: упомянуть {company_name} и сказать, что звоните с аккуратной гипотезой по публичной стороне.",
+            f"2. Наблюдение: {observation_line}",
+            f"3. Discovery-вопрос: {soprano_question}",
+            f"4. Приоритетный вопрос по сделке: {closing_criteria.next_best_question}",
+            f"5. Если проблема подтверждается, предложить следующий шаг: {first_offer}",
+            "6. Если собеседник сомневается, предложить короткий диагностический summary вместо давления на встречу.",
         ]
     )
 

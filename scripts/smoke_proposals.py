@@ -72,6 +72,8 @@ async def verify_services(company_id: int) -> None:
             item.code in {"audit_roadmap", "landing_start", "maps_reputation", "crm_bot"}
             for item in suggestions
         ), "sales intelligence should influence package selection"
+        assert any("А" <= char <= "я" or char in "Ёё" for char in suggestions[0].title), "package title must be Russian-readable"
+        assert any("А" <= char <= "я" or char in "Ёё" for char in suggestions[0].reason), "package reason must be Russian-readable"
 
         proposal = await generate_commercial_proposal(session, company_id, use_ai=False)
         assert proposal.content.startswith("# Коммерческое предложение"), "proposal must be generated"

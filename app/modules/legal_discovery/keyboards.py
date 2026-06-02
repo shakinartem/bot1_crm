@@ -18,7 +18,7 @@ def discovery_niche_markup() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="86.23 Стоматология", callback_data="discovery:niche:86.23")],
             [InlineKeyboardButton(text="56.10 Рестораны", callback_data="discovery:niche:56.10")],
             [InlineKeyboardButton(text="69.10 Юридические услуги", callback_data="discovery:niche:69.10")],
-            [InlineKeyboardButton(text="Ручной OKVED", callback_data="discovery:niche:manual")],
+            [InlineKeyboardButton(text="Ручной ОКВЭД", callback_data="discovery:niche:manual")],
         ]
     )
 
@@ -41,7 +41,7 @@ def discovery_preview_markup(preview_id: str) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="Импортировать все new", callback_data=f"discovery:import:{preview_id}:all_new")],
             [InlineKeyboardButton(text="Импортировать с сайтами", callback_data=f"discovery:import:{preview_id}:new_with_websites")],
             [InlineKeyboardButton(text="Импортировать phone/site", callback_data=f"discovery:import:{preview_id}:new_with_phone_or_website")],
-            [InlineKeyboardButton(text="Экспорт preview CSV", callback_data=f"discovery:export:{preview_id}")],
+            [InlineKeyboardButton(text="Экспортировать preview CSV", callback_data=f"discovery:export:{preview_id}")],
             [InlineKeyboardButton(text="Отмена", callback_data="discovery:cancel")],
         ]
     )

@@ -8,7 +8,9 @@ The current MVP also includes a dedicated `sales_intelligence` layer for:
 - five closing-criteria readiness checks
 - SOPRANO question generation
 - AI-or-fallback cold call plan generation
+- Russian-localized user-facing sales output for Telegram and API payload text
 - Telegram/API/Bot 2/proposals/analytics integrations
+- grouped Telegram main menu for faster manual testing
 
 Storage note for the current MVP:
 
@@ -206,6 +208,11 @@ The stored `sales_intelligence` payload currently includes:
 - `cold_call_plan`
 - `saved_at`
 
+User-facing output notes:
+
+- service enums such as `weak`, `basic`, `normal`, `strong`, `excellent`, `ai`, and `fallback` remain machine-readable
+- human-readable explanations, risks, opportunities, SOPRANO questions, and cold-call-plan text are localized to Russian
+
 ## Bot 2 handoff API
 
 Preferred endpoints for SHARiK digital Consultation AI:
@@ -290,6 +297,49 @@ Example response shape:
 - empty `BOT2_API_TOKEN` => dev mode, no auth required
 - non-empty `BOT2_API_TOKEN` => send `Authorization: Bearer <BOT2_API_TOKEN>`
 
+## Bot2 API Authorization
+
+Use this header format for Swagger, curl, and any external Bot2 client:
+
+```text
+Authorization: Bearer <BOT2_API_KEY>
+```
+
+Example:
+
+```bash
+curl -H "Authorization: Bearer YOUR_BOT2_API_KEY" \
+  http://127.0.0.1:8000/api/bot2/companies/1/consultation-context
+```
+
+If the header is wrong, the API returns:
+
+```json
+{
+  "detail": "Invalid BOT2 API token. Use header: Authorization: Bearer <BOT2_API_KEY>"
+}
+```
+
+## Telegram Menu Structure
+
+The Telegram main menu is now grouped for daily manager work:
+
+- `🔍 Поиск и импорт`
+- `🏢 CRM / Компании`
+- `👤 Мои лиды`
+- `📞 Продажи`
+- `📄 КП и документы`
+- `🧠 AI / Research`
+- `📊 Аналитика`
+- `⚙️ Настройки`
+- `🔍 Поиск компаний`
+
+Notes:
+
+- `🔍 Поиск компаний` is the direct entrypoint into the existing legal discovery flow
+- the flow remains `источник -> ОКВЭД -> регион -> лимит -> preview -> import`
+- if a section is prepared but not fully implemented yet, the bot shows a placeholder instead of failing
+
 Status mapping for Bot 2 handoff:
 
 - `consultation_planned` -> company is ready for BOT 2
@@ -337,6 +387,13 @@ Telegram flow:
 - Upload the CSV as a document.
 - Review preview, mapping, and counters.
 - Confirm import in `skip` or `update` mode.
+
+Search/import workflow:
+
+- open `🔍 Поиск и импорт` for grouped navigation
+- use `🔍 Поиск компаний` for legal discovery
+- use `📥 Импорт CSV` for bulk import
+- use `🔎 Поиск по CRM` for existing cards
 
 API flow:
 
@@ -872,6 +929,12 @@ Minimal assignment API:
 - `GET /api/users`
 - `GET /api/users/{user_id}`
 - `PATCH /api/users/{user_id}`
+
+## Known Limitations
+
+- PDF/DOCX export is intentionally not part of this UX pass and will be implemented in the separate `Document Export PDF/DOCX` stage.
+- Some Telegram sections currently serve as grouped entrypoints and placeholders rather than full sub-menus.
+- Bot2 endpoint protection remains enabled; only docs, Swagger description, and the 401 hint were improved.
 - `POST /api/companies/{company_id}/assign`
 - `GET /api/users/{user_id}/companies`
 - `GET /api/users/{user_id}/tasks`

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Localized sales intelligence user-facing outputs to Russian.
+- Added Russian package display names for proposal suggestions and manual selection.
+- Improved Bot2 authorization documentation, Swagger description, and 401 error hint.
+- Added grouped Telegram main menu for manual testing workflows.
+- Added direct `🔍 Поиск компаний` entrypoint into the existing legal discovery flow.
+- Added `scripts/smoke_russian_localization.py`.
+- Tightened smoke coverage for Russian call-plan text, proposal suggestion text, and Bot2 auth UX.
 - Added CRM user and roles foundation.
 - Added company and task assignment fields.
 - Added Telegram user auto-create and last-seen tracking.

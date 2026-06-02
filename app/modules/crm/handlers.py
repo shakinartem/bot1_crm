@@ -16,15 +16,22 @@ from app.modules.crm.keyboards import (
     NO_TEXT,
     SKIP_TEXT,
     YES_TEXT,
+    ai_research_section_menu_markup,
     call_results_markup,
     company_actions,
     company_list_markup,
     contact_type_menu,
+    crm_section_menu_markup,
     decision_maker_confirm_markup,
     flow_menu,
     follow_up_task_prompt_markup,
     history_markup,
+    leads_section_menu_markup,
     main_menu,
+    proposals_section_menu_markup,
+    sales_section_menu_markup,
+    search_import_menu_markup,
+    settings_section_menu_markup,
     stats_markup,
     stats_company_list_markup,
     status_options_markup,
@@ -67,6 +74,8 @@ from app.modules.crm.states import (
     DecisionMakerStates,
     TaskStates,
 )
+from app.modules.imports.states import ImportCsvStates
+from app.modules.legal_discovery.keyboards import discovery_provider_markup
 from app.modules.users.service import assign_company_to_user, build_display_name
 from app.utils.telegram import get_current_crm_user
 
@@ -279,6 +288,100 @@ async def _show_stats(message: Message, *, edit: bool = False) -> None:
     await message.answer(text, reply_markup=markup)
 
 
+async def _show_search_import_section(message: Message, *, edit: bool = False) -> None:
+    text = (
+        "🔍 Поиск и импорт\n\n"
+        "Здесь собраны сценарии поиска компаний и загрузки базы.\n\n"
+        "Сейчас доступны:\n"
+        "• 🔍 Поиск компаний — existing legal discovery flow\n"
+        "• 📥 Импорт CSV\n"
+        "• 🔎 Поиск по CRM"
+    )
+    markup = search_import_menu_markup()
+    if edit:
+        await _safe_edit_message(message, text, reply_markup=markup)
+        return
+    await message.answer(text, reply_markup=markup)
+
+
+async def _show_crm_section(message: Message, *, edit: bool = False) -> None:
+    text = (
+        "🏢 CRM / Компании\n\n"
+        "Быстрый доступ к карточкам компаний, созданию новых записей и поиску по CRM."
+    )
+    markup = crm_section_menu_markup()
+    if edit:
+        await _safe_edit_message(message, text, reply_markup=markup)
+        return
+    await message.answer(text, reply_markup=markup)
+
+
+async def _show_leads_section(message: Message, *, edit: bool = False) -> None:
+    text = (
+        "👤 Мои лиды\n\n"
+        "Здесь собраны ваши ближайшие касания и быстрый переход к последним компаниям."
+    )
+    markup = leads_section_menu_markup()
+    if edit:
+        await _safe_edit_message(message, text, reply_markup=markup)
+        return
+    await message.answer(text, reply_markup=markup)
+
+
+async def _show_sales_section(message: Message, *, edit: bool = False) -> None:
+    text = (
+        "📞 Продажи\n\n"
+        "Sales Intelligence открывается из карточки компании.\n"
+        "Там доступны:\n"
+        "• план звонка\n"
+        "• 5 критериев сделки\n"
+        "• вопросы SOPRANO"
+    )
+    markup = sales_section_menu_markup()
+    if edit:
+        await _safe_edit_message(message, text, reply_markup=markup)
+        return
+    await message.answer(text, reply_markup=markup)
+
+
+async def _show_documents_section(message: Message, *, edit: bool = False) -> None:
+    text = (
+        "📄 КП и документы\n\n"
+        "В этом этапе оставляем удобный вход в существующий workflow КП/договора из карточки компании.\n"
+        "PDF/DOCX экспорт пойдёт отдельным этапом Document Export."
+    )
+    markup = proposals_section_menu_markup()
+    if edit:
+        await _safe_edit_message(message, text, reply_markup=markup)
+        return
+    await message.answer(text, reply_markup=markup)
+
+
+async def _show_ai_research_section(message: Message, *, edit: bool = False) -> None:
+    text = (
+        "🧠 AI / Research\n\n"
+        "Раздел для research, INN / Intelligence и Bot2 context.\n"
+        "Основные действия пока открываются из карточки компании и API."
+    )
+    markup = ai_research_section_menu_markup()
+    if edit:
+        await _safe_edit_message(message, text, reply_markup=markup)
+        return
+    await message.answer(text, reply_markup=markup)
+
+
+async def _show_settings_section(message: Message, *, edit: bool = False) -> None:
+    text = (
+        "⚙️ Настройки\n\n"
+        "Раздел подготовлен. Функция будет добавлена в следующем этапе."
+    )
+    markup = settings_section_menu_markup()
+    if edit:
+        await _safe_edit_message(message, text, reply_markup=markup)
+        return
+    await message.answer(text, reply_markup=markup)
+
+
 async def _safe_edit_message(
     message: Message,
     text: str,
@@ -310,6 +413,36 @@ async def start(message: Message, state: FSMContext) -> None:
 async def menu(message: Message, state: FSMContext) -> None:
     await state.clear()
     await message.answer("Главное меню CRM.", reply_markup=main_menu())
+
+
+@router.message(F.text == "🔍 Поиск и импорт")
+async def search_import_section(message: Message) -> None:
+    await _show_search_import_section(message)
+
+
+@router.message(F.text == "🏢 CRM / Компании")
+async def crm_section(message: Message) -> None:
+    await _show_crm_section(message)
+
+
+@router.message(F.text == "👤 Мои лиды")
+async def leads_section(message: Message) -> None:
+    await _show_leads_section(message)
+
+
+@router.message(F.text == "📞 Продажи")
+async def sales_section(message: Message) -> None:
+    await _show_sales_section(message)
+
+
+@router.message(F.text == "📄 КП и документы")
+async def documents_section(message: Message) -> None:
+    await _show_documents_section(message)
+
+
+@router.message(F.text == "🧠 AI / Research")
+async def ai_research_section(message: Message) -> None:
+    await _show_ai_research_section(message)
 
 
 @router.message(Command("cancel"))
@@ -494,6 +627,169 @@ async def call_result(message: Message) -> None:
 @router.message(F.text == "Задачи на сегодня")
 async def today_tasks(message: Message) -> None:
     await _show_today_tasks(message)
+
+
+@router.callback_query(F.data == "menu:main")
+async def menu_main_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
+    await callback.answer()
+    if callback.message:
+        await callback.message.answer("Главное меню CRM.", reply_markup=main_menu())
+
+
+@router.callback_query(F.data == "menu:search_import:companies")
+async def menu_search_companies_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.message:
+        return
+    await state.clear()
+    await _safe_edit_message(
+        callback.message,
+        "🔍 Поиск компаний\n\nВыберите источник для existing legal discovery flow:",
+        reply_markup=discovery_provider_markup(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "menu:search_import:import_csv")
+async def menu_import_csv_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.message:
+        return
+    await state.clear()
+    await state.set_state(ImportCsvStates.awaiting_file)
+    await callback.answer()
+    await callback.message.answer(
+        "Отправьте CSV-файл документом. Сначала покажу preview, потом попрошу подтвердить импорт.",
+        reply_markup=main_menu(),
+    )
+
+
+@router.callback_query(F.data.in_({"menu:search_import:crm_search", "menu:crm:search"}))
+async def menu_crm_search_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.message:
+        return
+    await state.clear()
+    await state.set_state(CompanySearchStates.query)
+    await callback.answer()
+    await callback.message.answer(
+        "Введите название, ИНН, телефон, сайт, город, ФИО ЛПР или контакт.",
+        reply_markup=flow_menu(),
+    )
+
+
+@router.callback_query(F.data == "menu:crm:list")
+async def menu_crm_list_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.message:
+        return
+    await state.clear()
+    await _show_recent_companies(callback.message, edit=True)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "menu:crm:add")
+async def menu_crm_add_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.message:
+        return
+    await state.clear()
+    await state.set_state(CompanyCreateStates.name)
+    await callback.answer()
+    await callback.message.answer("Введите название компании.", reply_markup=flow_menu())
+
+
+@router.callback_query(F.data == "menu:leads:today")
+async def menu_leads_today_callback(callback: CallbackQuery) -> None:
+    if not callback.message:
+        return
+    await _show_today_tasks(callback.message, edit=True)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "menu:leads:companies")
+async def menu_leads_companies_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.message:
+        return
+    await state.clear()
+    await _show_recent_companies(callback.message, edit=True)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "menu:sales:call_plan_help")
+async def menu_sales_call_plan_help(callback: CallbackQuery) -> None:
+    if not callback.message:
+        return
+    await _safe_edit_message(
+        callback.message,
+        "📞 Продажи\n\nОткройте карточку компании и нажмите «📞 План звонка». Там доступны план звонка, 5 критериев сделки и вопросы SOPRANO.",
+        reply_markup=sales_section_menu_markup(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "menu:sales:soprano_help")
+async def menu_sales_soprano_help(callback: CallbackQuery) -> None:
+    if not callback.message:
+        return
+    await _safe_edit_message(
+        callback.message,
+        "🧠 SOPRANO открывается из карточки компании через раздел Sales Intelligence. В этом этапе все вопросы и описания локализованы на русский.",
+        reply_markup=sales_section_menu_markup(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "menu:docs:proposal_help")
+async def menu_docs_help(callback: CallbackQuery) -> None:
+    if not callback.message:
+        return
+    await _safe_edit_message(
+        callback.message,
+        "📄 КП и документы\n\nСейчас основной вход — через карточку компании и кнопку «📄 КП / Договор». PDF/DOCX экспорт будет отдельным следующим этапом.",
+        reply_markup=proposals_section_menu_markup(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "menu:ai:research")
+async def menu_ai_research_callback(callback: CallbackQuery) -> None:
+    if not callback.message:
+        return
+    await _safe_edit_message(
+        callback.message,
+        "🧠 AI / Research\n\nДля поиска компаний используйте «🔍 Поиск компаний». Research по компании и legal discovery flow уже доступны.",
+        reply_markup=ai_research_section_menu_markup(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "menu:ai:intelligence")
+async def menu_ai_intelligence_callback(callback: CallbackQuery) -> None:
+    if not callback.message:
+        return
+    await _safe_edit_message(
+        callback.message,
+        "🧾 INN / Intelligence открывается из карточки компании. Там можно найти юрлицо, подтянуть сайт и собрать сигналы по компании.",
+        reply_markup=ai_research_section_menu_markup(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "menu:ai:bot2")
+async def menu_ai_bot2_callback(callback: CallbackQuery) -> None:
+    if not callback.message:
+        return
+    await _safe_edit_message(
+        callback.message,
+        "🤖 Bot2 context доступен через API `/api/bot2/companies/{company_id}/consultation-context` и защищён заголовком `Authorization: Bearer <BOT2_API_KEY>`.",
+        reply_markup=ai_research_section_menu_markup(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "menu:settings:about")
+async def menu_settings_about_callback(callback: CallbackQuery) -> None:
+    if not callback.message:
+        return
+    await _show_settings_section(callback.message, edit=True)
+    await callback.answer()
 
 
 @router.callback_query(F.data == "company:list")
@@ -1077,5 +1373,6 @@ async def stats_overdue_tasks_callback(callback: CallbackQuery) -> None:
 
 
 @router.message(F.text == "Настройки")
+@router.message(F.text == "⚙️ Настройки")
 async def settings_placeholder(message: Message) -> None:
     await message.answer("Настройки CRM будут добавлены на следующем этапе. AI-настройки доступны отдельной командой.")

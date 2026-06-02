@@ -259,15 +259,19 @@ async def verify_sales_intelligence(company_id: int) -> None:
         closing = await build_closing_criteria_readiness(session, company_id)
         assert closing.next_best_question, "next best question must be generated"
         assert closing.financial_opportunity.status in {"unknown", "weak", "possible", "strong"}
+        assert any("А" <= char <= "я" or char in "Ёё" for char in closing.summary), "closing summary must be Russian"
+        assert any("А" <= char <= "я" or char in "Ёё" for char in closing.next_best_question), "closing question must be Russian"
 
         soprano = await generate_soprano_questions(session, company_id)
         assert soprano.intro, "intro must be generated"
         assert soprano.recommended_order, "recommended order must be present"
+        assert any("А" <= char <= "я" or char in "Ёё" for char in soprano.situation[0]), "SOPRANO questions must be Russian"
 
         plan = await generate_cold_call_plan(session, company_id, use_ai=True)
         assert plan.generation_mode == "fallback", "fallback mode is expected in smoke"
         assert plan.copyable_short_script, "copyable short script must exist"
         assert len(plan.copyable_short_script) <= 1000, "manager script must stay concise"
+        assert any("А" <= char <= "я" or char in "Ёё" for char in plan.copyable_short_script), "short script must be Russian"
 
         saved_snapshot = await get_latest_company_insight(session, company_id, "sales_intelligence")
         assert saved_snapshot is not None, "cold-call generation must persist a company insight snapshot"
