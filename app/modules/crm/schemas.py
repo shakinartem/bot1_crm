@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.modules.crm.constants import (
     CompanyStatus,
     ContactType,
+    CRMUserRole,
     InteractionResult,
     InteractionType,
     LeadPriority,
@@ -38,6 +39,9 @@ class CompanyBase(BaseModel):
     status: CompanyStatus = CompanyStatus.NEW
     priority: LeadPriority = LeadPriority.MEDIUM
     notes: str | None = None
+    assigned_user_id: int | None = None
+    created_by_user_id: int | None = None
+    updated_by_user_id: int | None = None
 
 
 class CompanyCreate(CompanyBase):
@@ -124,6 +128,7 @@ class InteractionCreate(BaseModel):
     next_action: str | None = None
     next_action_at: datetime | None = None
     created_by: str | None = None
+    created_by_user_id: int | None = None
 
 
 class InteractionRead(InteractionCreate):
@@ -140,6 +145,8 @@ class FollowUpTaskCreate(BaseModel):
     due_at: datetime | None = None
     status: TaskStatus = TaskStatus.OPEN
     priority: LeadPriority = LeadPriority.MEDIUM
+    assigned_user_id: int | None = None
+    created_by_user_id: int | None = None
 
 
 class FollowUpTaskUpdate(BaseModel):
@@ -149,6 +156,7 @@ class FollowUpTaskUpdate(BaseModel):
     status: TaskStatus | None = None
     priority: LeadPriority | None = None
     completed_at: datetime | None = None
+    assigned_user_id: int | None = None
 
 
 class FollowUpTaskRead(FollowUpTaskCreate):
@@ -188,6 +196,8 @@ class Bot2CompanyContext(BaseModel):
     status: str
     priority: str
     notes: str | None = None
+    assigned_user_id: int | None = None
+    created_by_user_id: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -236,8 +246,16 @@ class Bot2TaskContext(BaseModel):
     due_at: datetime | None = None
     priority: str
     status: str
+    assigned_user_id: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class Bot2AssignmentContext(BaseModel):
+    assigned_user_id: int | None = None
+    assigned_user_name: str | None = None
+    assigned_user_role: str | None = None
+    created_by_user_id: int | None = None
 
 
 class Bot2SalesIntelligenceContext(BaseModel):
@@ -260,6 +278,7 @@ class Bot2ConsultationContextRead(BaseModel):
     latest_call_result: Bot2InteractionContext | None = None
     recommended_next_step: str
     sales_summary: str
+    assignment: Bot2AssignmentContext | None = None
     enrichment: Bot2EnrichmentContextRead | None = None
     intelligence: Bot2IntelligenceContextRead | None = None
     research: ResearchContextRead | None = None

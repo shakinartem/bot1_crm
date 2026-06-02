@@ -67,6 +67,8 @@ from app.modules.crm.states import (
     DecisionMakerStates,
     TaskStates,
 )
+from app.modules.users.service import assign_company_to_user, build_display_name
+from app.utils.telegram import get_current_crm_user
 
 router = Router(name="crm")
 
@@ -229,7 +231,8 @@ async def _show_company_card(message: Message, company_id: int, *, edit: bool = 
     if not company:
         return False
 
-    text = format_company_card_with_score(company)
+    assigned_user_text = build_display_name(getattr(company, "assigned_user", None)) or "не назначен"
+    text = f"👤 <b>Менеджер:</b> {assigned_user_text}\n\n{format_company_card_with_score(company)}"
     markup = company_actions(company_id)
     markup.inline_keyboard.insert(4, [InlineKeyboardButton(text="📞 План звонка", callback_data=f"sales:open:{company_id}")])
     if edit:
@@ -294,6 +297,8 @@ async def _safe_edit_message(
 @router.message(CommandStart())
 async def start(message: Message, state: FSMContext) -> None:
     await state.clear()
+    async with async_session_factory() as session:
+        await get_current_crm_user(session, message)
     await message.answer(
         "ШАРиК Sales Intelligence готов.\n"
         "Выберите действие.",
@@ -529,6 +534,26 @@ async def company_call_callback(callback: CallbackQuery) -> None:
         reply_markup=call_results_markup(company_id),
     )
     await callback.answer()
+
+
+@router.callback_query(F.data.startswith("company:assignme:"))
+async def company_assign_me_callback(callback: CallbackQuery) -> None:
+    if not callback.message:
+        await callback.answer("Не удалось назначить компанию.", show_alert=True)
+        return
+
+    company_id = int(callback.data.rsplit(":", 1)[-1])
+    async with async_session_factory() as session:
+        current_user = await get_current_crm_user(session, callback)
+        await assign_company_to_user(
+            session,
+            company_id,
+            current_user.id,
+            actor_user_id=current_user.id,
+        )
+
+    await callback.answer("Компания назначена на вас.")
+    await _show_company_card(callback.message, company_id, edit=True)
 
 
 @router.callback_query(F.data.startswith("call:pick:"))

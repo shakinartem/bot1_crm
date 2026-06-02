@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
-from aiogram.types import FSInputFile, Message
+from aiogram.types import CallbackQuery, FSInputFile, Message
 
 from app.config import get_settings
+from app.modules.crm.models import CRMUser
+from app.modules.users.service import get_or_create_user_from_telegram
 
 
 def chunk_text(text: str, limit: int = 3500) -> list[str]:
@@ -47,3 +50,7 @@ async def send_long_message_or_file(
     file_path.write_text(text, encoding="utf-8")
     await message.answer_document(FSInputFile(file_path), caption=caption)
     return file_path
+
+
+async def get_current_crm_user(session: Any, message_or_callback: Message | CallbackQuery) -> CRMUser:
+    return await get_or_create_user_from_telegram(session, message_or_callback)

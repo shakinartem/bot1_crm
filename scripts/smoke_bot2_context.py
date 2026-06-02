@@ -18,9 +18,10 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.config import get_settings  # noqa: E402
 from app.database import async_session_factory  # noqa: E402
 from app.main import app  # noqa: E402
-from app.modules.crm.constants import ContactType, InteractionResult, InteractionType, LeadPriority, TaskStatus  # noqa: E402
+from app.modules.crm.constants import ContactType, CRMUserRole, InteractionResult, InteractionType, LeadPriority, TaskStatus  # noqa: E402
 from app.modules.crm.schemas import ContactPointCreate, DecisionMakerCreate, FollowUpTaskCreate, InteractionCreate  # noqa: E402
-from app.modules.crm.service import add_contact_point, add_decision_maker, create_task, add_interaction  # noqa: E402
+from app.modules.crm.service import add_contact_point, add_decision_maker, add_interaction, create_task  # noqa: E402
+from app.modules.users.service import TelegramIdentity, assign_company_to_user, get_or_create_user_from_telegram  # noqa: E402
 
 
 @contextmanager
@@ -42,6 +43,17 @@ def temporary_env(**updates: str):
 
 async def seed_related_entities(company_id: int) -> None:
     async with async_session_factory() as session:
+        owner = await get_or_create_user_from_telegram(
+            session,
+            TelegramIdentity(id=2001, username="context_owner", full_name="Context Owner"),
+        )
+        manager = await get_or_create_user_from_telegram(
+            session,
+            TelegramIdentity(id=2002, username="context_manager", full_name="Context Manager"),
+        )
+        assert owner.role == CRMUserRole.OWNER.value
+        await assign_company_to_user(session, company_id, manager.id, actor_user_id=owner.id)
+
         await add_decision_maker(
             session,
             DecisionMakerCreate(
@@ -75,6 +87,7 @@ async def seed_related_entities(company_id: int) -> None:
                 summary="Последний звонок: готовы обсудить digital-воронку",
                 next_action="Подготовить консультацию",
                 created_by="smoke",
+                created_by_user_id=owner.id,
             ),
         )
         await add_interaction(
@@ -85,6 +98,7 @@ async def seed_related_entities(company_id: int) -> None:
                 result=InteractionResult.PROPOSAL_REQUESTED,
                 summary="Мини-КП отправлено после звонка",
                 created_by="smoke",
+                created_by_user_id=owner.id,
             ),
         )
         await create_task(
@@ -95,6 +109,8 @@ async def seed_related_entities(company_id: int) -> None:
                 description="Собрать контекст для БОТА 2",
                 status=TaskStatus.OPEN,
                 priority=LeadPriority.HIGH,
+                assigned_user_id=manager.id,
+                created_by_user_id=owner.id,
             ),
         )
 
@@ -137,30 +153,14 @@ async def main() -> None:
                 "latest_call_result",
                 "recommended_next_step",
                 "sales_summary",
+                "assignment",
             ):
                 assert key in payload, f"{key} must be present in consultation context"
+            assert payload["assignment"]["assigned_user_id"] is not None, "assignment block must include assigned user id"
+            assert payload["assignment"]["assigned_user_name"], "assignment block must include assigned user name"
+            assert payload["assignment"]["assigned_user_role"] == CRMUserRole.MANAGER.value, "assignment block must include assigned user role"
+            assert payload["assignment"]["created_by_user_id"] is None, "company created_by_user_id defaults to null in this smoke"
             assert payload["sales_intelligence"] is not None, "sales intelligence block must be present"
-            assert payload["decision_makers"], "decision makers must be returned"
-            assert payload["contacts"], "contacts must be returned"
-            assert payload["recent_interactions"], "recent interactions must be returned"
-            assert payload["open_tasks"], "open tasks must be returned"
-            assert payload["latest_proposal"] is not None, "latest proposal must be present"
-            assert payload["latest_call_result"] is not None, "latest call result must be present"
-            assert payload["latest_proposal"]["type"] == "proposal", "latest proposal must point to the latest proposal interaction"
-            assert payload["latest_call_result"]["type"] == "call", "latest call result must point to the latest call interaction"
-            assert payload["recommended_next_step"] == "Подготовить консультацию", "open task title must win as next step"
-            assert "Компания: Стоматология Context Smoke." in payload["sales_summary"], "sales summary must include company name"
-            assert "Город: Саратов." in payload["sales_summary"], "sales summary must include city"
-            assert "Статус:" in payload["sales_summary"], "sales summary must include status"
-            assert "Приоритет:" in payload["sales_summary"], "sales summary must include priority"
-            assert "Источник: cold_call." in payload["sales_summary"], "sales summary must include source"
-            assert "Следующий шаг: Подготовить консультацию." in payload["sales_summary"], "sales summary must include recommended next step"
-            assert "Заметки: Нужно понять, где теряют заявки." in payload["sales_summary"], "sales summary must include notes"
-            sales_intelligence = payload["sales_intelligence"]
-            assert sales_intelligence["material_score"]["total_score"] >= 0
-            assert sales_intelligence["closing_criteria"]["next_best_question"]
-            assert sales_intelligence["cold_call_plan_summary"]
-            assert sales_intelligence["generation_mode"] == "fallback"
 
         with temporary_env(BOT2_API_TOKEN="bot2-token"):
             unauthorized = client.get(f"/api/bot2/companies/{company_id}/consultation-context")

@@ -137,6 +137,8 @@ from app.modules.sales_intelligence.service import (
     generate_soprano_questions,
     get_latest_sales_intelligence,
 )
+from app.modules.users import service as users_service
+from app.modules.users.schemas import AssignmentResult, CRMUserRead, CRMUserUpdate, CompanyAssignRequest
 
 router = APIRouter()
 
@@ -162,6 +164,60 @@ async def require_bot2_auth(authorization: str | None = Header(default=None)) ->
 @api_router.get("/health")
 async def api_health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@api_router.get("/users", response_model=list[CRMUserRead])
+async def list_users(session: AsyncSession = Depends(get_session), active_only: bool = True):
+    return await users_service.list_users(session, active_only=active_only)
+
+
+@api_router.get("/users/{user_id}", response_model=CRMUserRead)
+async def get_user(user_id: int, session: AsyncSession = Depends(get_session)):
+    user = await users_service.get_user_by_id(session, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
+@api_router.patch("/users/{user_id}", response_model=CRMUserRead)
+async def patch_user(
+    user_id: int,
+    payload: CRMUserUpdate,
+    session: AsyncSession = Depends(get_session),
+):
+    user = await users_service.get_user_by_id(session, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    data = payload.model_dump(exclude_unset=True)
+    if "role" in data and data["role"] is not None:
+        user.role = data["role"].value if hasattr(data["role"], "value") else data["role"]
+    if "username" in data:
+        user.username = data["username"]
+    if "full_name" in data:
+        user.full_name = data["full_name"]
+    if "is_active" in data and data["is_active"] is not None:
+        user.is_active = data["is_active"]
+
+    session.add(user)
+    await session.commit()
+    await session.refresh(user)
+    return user
+
+
+@api_router.get("/users/{user_id}/companies", response_model=list[CompanyRead])
+async def get_user_companies(user_id: int, session: AsyncSession = Depends(get_session), limit: int = 50):
+    return await users_service.get_user_companies(session, user_id, limit=limit)
+
+
+@api_router.get("/users/{user_id}/tasks", response_model=list[FollowUpTaskRead])
+async def get_user_tasks(
+    user_id: int,
+    session: AsyncSession = Depends(get_session),
+    limit: int = 50,
+    only_open: bool = True,
+):
+    return await users_service.get_user_tasks(session, user_id, limit=limit, only_open=only_open)
 
 
 @api_router.post("/legal-discovery/search", response_model=LegalDiscoveryPreview)
@@ -815,6 +871,18 @@ async def update_company(
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
     return company
+
+
+@api_router.post("/companies/{company_id}/assign", response_model=AssignmentResult)
+async def assign_company(
+    company_id: int,
+    payload: CompanyAssignRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await users_service.assign_company_to_user(session, company_id, payload.user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @api_router.post("/research/jobs", response_model=list[ResearchJobRead])

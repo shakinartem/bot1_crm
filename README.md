@@ -831,3 +831,64 @@ Safety and limitations:
 - no search-engine HTML scraping by hand
 - browser rendering is only an optional future abstraction
 - if a site is blocked or confidence is low, the result goes to manual review
+
+## Users, Roles and Assignments
+
+This foundation stage adds team-ready CRM users without turning the current MVP into a full RBAC system.
+
+What was added:
+
+- `CRMUser` in `app/modules/crm/models.py`
+- lightweight roles: `owner`, `admin`, `manager`, `researcher`, `viewer`
+- nullable assignment and audit fields on `Company`, `FollowUpTask`, and `LeadInteraction`
+- Telegram-aware auto-create of CRM users
+- minimal company self-assignment flow in Telegram
+- minimal user and assignment API endpoints
+- Bot 2 assignment context block
+
+Auto-create from Telegram:
+
+- the first Telegram user in an empty `crm_users` table becomes `owner`
+- next users get `DEFAULT_NEW_USER_ROLE`, default `manager`
+- `CRM_OWNER_TELEGRAM_IDS` can pre-elevate selected Telegram IDs to `owner`
+- every `/start` updates `last_seen_at`
+
+Assignment behavior in this stage:
+
+- company cards show the currently assigned user compactly
+- company cards expose `Назначить на себя`
+- company assignment writes an audit note into `LeadInteraction`
+- task records support `assigned_user_id` and `created_by_user_id`
+- interaction records support `created_by_user_id`
+
+Environment variables:
+
+- `DEFAULT_NEW_USER_ROLE=manager`
+- `CRM_AUTO_CREATE_USERS=true`
+- `CRM_OWNER_TELEGRAM_IDS=123456789,987654321`
+
+Minimal assignment API:
+
+- `GET /api/users`
+- `GET /api/users/{user_id}`
+- `PATCH /api/users/{user_id}`
+- `POST /api/companies/{company_id}/assign`
+- `GET /api/users/{user_id}/companies`
+- `GET /api/users/{user_id}/tasks`
+
+Bot 2 context now includes:
+
+- `assignment.assigned_user_id`
+- `assignment.assigned_user_name`
+- `assignment.assigned_user_role`
+- `assignment.created_by_user_id`
+
+Smoke check:
+
+```bash
+py -3 scripts/smoke_users_roles.py
+```
+
+Current limitation:
+
+- this is an MVP foundation layer, not full security or enterprise RBAC

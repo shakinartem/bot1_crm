@@ -63,6 +63,14 @@ class TaskStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class CRMUserRole(StrEnum):
+    OWNER = "owner"
+    ADMIN = "admin"
+    MANAGER = "manager"
+    RESEARCHER = "researcher"
+    VIEWER = "viewer"
+
+
 BOT2_READY_STATUS = CompanyStatus.CONSULTATION_PLANNED.value
 
 BOT2_RESULT_TO_COMPANY_STATUS = {

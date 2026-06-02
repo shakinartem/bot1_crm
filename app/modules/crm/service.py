@@ -23,6 +23,7 @@ from app.modules.crm.constants import (
 )
 from app.modules.crm.models import Company, ContactPoint, DecisionMaker, FollowUpTask, LeadInteraction
 from app.modules.crm.schemas import (
+    Bot2AssignmentContext,
     Bot2CompanyContext,
     Bot2ConsultationContextRead,
     Bot2ConsultationResultCreate,
@@ -39,6 +40,7 @@ from app.modules.crm.schemas import (
     FollowUpTaskUpdate,
     InteractionCreate,
 )
+from app.modules.users.service import build_display_name
 
 
 CALL_RESULT_STATUS_MAP = {
@@ -89,8 +91,7 @@ async def create_company(session: AsyncSession, payload: CompanyCreate) -> Compa
     company = Company(**payload.model_dump())
     session.add(company)
     await session.commit()
-    await session.refresh(company)
-    return company
+    return await get_company(session, company.id) or company
 
 
 async def list_companies(
@@ -159,6 +160,9 @@ async def get_company(session: AsyncSession, company_id: int) -> Company | None:
             selectinload(Company.intelligence_snapshots),
             selectinload(Company.insight_snapshots),
             selectinload(Company.research_jobs),
+            selectinload(Company.assigned_user),
+            selectinload(Company.created_by_user),
+            selectinload(Company.updated_by_user),
         )
     )
     return result.scalar_one_or_none()
@@ -269,8 +273,12 @@ async def add_interaction(session: AsyncSession, payload: InteractionCreate) -> 
     interaction = LeadInteraction(**data, next_step=data.get("next_action"))
     session.add(interaction)
     await session.commit()
-    await session.refresh(interaction)
-    return interaction
+    result = await session.execute(
+        select(LeadInteraction)
+        .where(LeadInteraction.id == interaction.id)
+        .options(selectinload(LeadInteraction.created_by_user))
+    )
+    return result.scalar_one()
 
 
 async def list_interactions(
@@ -312,6 +320,7 @@ async def create_note_interaction(
     summary: str,
     *,
     created_by: str | None = "telegram",
+    created_by_user_id: int | None = None,
     next_action: str | None = None,
 ) -> LeadInteraction:
     payload = InteractionCreate(
@@ -320,6 +329,7 @@ async def create_note_interaction(
         summary=summary,
         next_action=next_action,
         created_by=created_by,
+        created_by_user_id=created_by_user_id,
     )
     return await add_interaction(session, payload)
 
@@ -330,8 +340,15 @@ async def save_company_note(
     text: str,
     *,
     created_by: str | None = "telegram",
+    created_by_user_id: int | None = None,
 ) -> LeadInteraction:
-    return await create_note_interaction(session, company_id, text, created_by=created_by)
+    return await create_note_interaction(
+        session,
+        company_id,
+        text,
+        created_by=created_by,
+        created_by_user_id=created_by_user_id,
+    )
 
 
 async def save_proposal_draft(
@@ -340,12 +357,14 @@ async def save_proposal_draft(
     text: str,
     *,
     created_by: str | None = "telegram",
+    created_by_user_id: int | None = None,
 ) -> LeadInteraction:
     payload = InteractionCreate(
         company_id=company_id,
         type=InteractionType.PROPOSAL,
         summary=text,
         created_by=created_by,
+        created_by_user_id=created_by_user_id,
     )
     return await add_interaction(session, payload)
 
@@ -356,6 +375,7 @@ async def change_company_status(
     new_status: str,
     *,
     created_by: str | None = "telegram",
+    created_by_user_id: int | None = None,
 ) -> Company | None:
     company = await get_company(session, company_id)
     if not company:
@@ -363,6 +383,7 @@ async def change_company_status(
 
     old_status = company.status
     company.status = new_status
+    company.updated_by_user_id = created_by_user_id or company.updated_by_user_id
     session.add(company)
     session.add(
         LeadInteraction(
@@ -373,11 +394,11 @@ async def change_company_status(
                 f"{humanize_company_status(old_status)} -> {humanize_company_status(new_status)}"
             ),
             created_by=created_by,
+            created_by_user_id=created_by_user_id,
         )
     )
     await session.commit()
-    await session.refresh(company)
-    return company
+    return await get_company(session, company_id)
 
 
 async def create_task(session: AsyncSession, payload: FollowUpTaskCreate) -> FollowUpTask:
@@ -385,8 +406,7 @@ async def create_task(session: AsyncSession, payload: FollowUpTaskCreate) -> Fol
     task = FollowUpTask(**data, due_date=data.get("due_at"))
     session.add(task)
     await session.commit()
-    await session.refresh(task)
-    return task
+    return await get_task(session, task.id) or task
 
 
 async def apply_bot2_consultation_result(
@@ -459,6 +479,8 @@ async def create_company_task(
     due_at: datetime | None,
     *,
     priority: str = LeadPriority.MEDIUM.value,
+    assigned_user_id: int | None = None,
+    created_by_user_id: int | None = None,
 ) -> FollowUpTask:
     payload = FollowUpTaskCreate(
         company_id=company_id,
@@ -466,6 +488,8 @@ async def create_company_task(
         description=description,
         due_at=due_at,
         priority=LeadPriority(priority),
+        assigned_user_id=assigned_user_id,
+        created_by_user_id=created_by_user_id,
     )
     return await create_task(session, payload)
 
@@ -473,7 +497,11 @@ async def create_company_task(
 async def list_tasks(session: AsyncSession, status: str | None = None) -> list[FollowUpTask]:
     stmt = (
         select(FollowUpTask)
-        .options(selectinload(FollowUpTask.company))
+        .options(
+            selectinload(FollowUpTask.company),
+            selectinload(FollowUpTask.assigned_user),
+            selectinload(FollowUpTask.created_by_user),
+        )
         .order_by(FollowUpTask.due_at.asc().nulls_last(), FollowUpTask.created_at.desc())
     )
     if status:
@@ -490,6 +518,7 @@ async def get_company_open_tasks(session: AsyncSession, company_id: int) -> list
             FollowUpTask.company_id == company_id,
             FollowUpTask.status == TaskStatus.OPEN.value,
         )
+        .options(selectinload(FollowUpTask.assigned_user))
         .order_by(FollowUpTask.due_at.asc().nulls_last(), FollowUpTask.created_at.desc())
     )
     return list(result.scalars().all())
@@ -504,7 +533,11 @@ async def get_task(session: AsyncSession, task_id: int) -> FollowUpTask | None:
     result = await session.execute(
         select(FollowUpTask)
         .where(FollowUpTask.id == task_id)
-        .options(selectinload(FollowUpTask.company))
+        .options(
+            selectinload(FollowUpTask.company),
+            selectinload(FollowUpTask.assigned_user),
+            selectinload(FollowUpTask.created_by_user),
+        )
     )
     return result.scalar_one_or_none()
 
@@ -545,8 +578,7 @@ async def complete_task(session: AsyncSession, task_id: int) -> FollowUpTask | N
         )
     )
     await session.commit()
-    await session.refresh(task)
-    return task
+    return await get_task(session, task_id)
 
 
 async def snooze_task(
@@ -572,8 +604,7 @@ async def snooze_task(
         )
     )
     await session.commit()
-    await session.refresh(task)
-    return task
+    return await get_task(session, task_id)
 
 
 async def get_task_dashboard(
@@ -785,6 +816,12 @@ async def build_bot2_consultation_context(
         ),
         generation_mode=cold_call_plan.generation_mode,
     )
+    assignment = Bot2AssignmentContext(
+        assigned_user_id=company.assigned_user_id,
+        assigned_user_name=build_display_name(company.assigned_user),
+        assigned_user_role=company.assigned_user.role if company.assigned_user else None,
+        created_by_user_id=company.created_by_user_id,
+    )
 
     return Bot2ConsultationContextRead(
         company=Bot2CompanyContext.model_validate(company),
@@ -796,6 +833,7 @@ async def build_bot2_consultation_context(
         latest_call_result=Bot2InteractionContext.model_validate(latest_call_result) if latest_call_result else None,
         recommended_next_step=recommended_next_step,
         sales_summary=sales_summary,
+        assignment=assignment,
         enrichment=await build_enrichment_context_for_company(session, company_id),
         intelligence=await build_intelligence_context_for_company(session, company_id),
         research=await build_research_context_for_company(session, company_id),

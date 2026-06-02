@@ -20,6 +20,9 @@ class Settings(BaseSettings):
 
     storage_path: Path = Field(default=Path("./storage"), alias="STORAGE_PATH")
     admin_ids: str = Field(default="", alias="ADMIN_IDS")
+    default_new_user_role: str = Field(default="manager", alias="DEFAULT_NEW_USER_ROLE")
+    crm_auto_create_users: bool = Field(default=True, alias="CRM_AUTO_CREATE_USERS")
+    crm_owner_telegram_ids: str = Field(default="", alias="CRM_OWNER_TELEGRAM_IDS")
     legal_provider: str = Field(default="mock", alias="LEGAL_PROVIDER")
     search_provider: str = Field(default="mock", alias="SEARCH_PROVIDER")
     api_fns_key: str = Field(default="", alias="API_FNS_KEY")
@@ -63,6 +66,10 @@ class Settings(BaseSettings):
     @property
     def admin_id_list(self) -> list[int]:
         return [int(item.strip()) for item in self.admin_ids.split(",") if item.strip().isdigit()]
+
+    @property
+    def crm_owner_telegram_id_list(self) -> list[int]:
+        return [int(item.strip()) for item in self.crm_owner_telegram_ids.split(",") if item.strip().isdigit()]
 
 
 @lru_cache

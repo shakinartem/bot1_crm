@@ -2,8 +2,12 @@
 
 ## Current Sprint
 
-- [ ] Manager roles and multi-user CRM
-- [ ] Real document templates with СЂРµРєРІРёР·РёС‚С‹
+- [ ] Full RBAC permissions
+- [ ] Web dashboard user management
+- [ ] Team workload analytics
+- [ ] Assignment automation after import
+- [ ] Manager performance reports
+- [ ] Real document templates with реквизитами
 - [ ] Real Bot 2 push integration
 - [ ] Advanced conversion attribution
 - [ ] External maps/reviews enrichment
@@ -25,6 +29,15 @@
 
 ## Done
 
+- CRMUser model
+- User roles foundation
+- Telegram user auto-create
+- Company assignment
+- Task assignment
+- Interaction attribution
+- Minimal user assignment API endpoints
+- Bot2 assignment context
+- Users roles smoke test
 - CSV import preview
 - CSV column mapping
 - CSV deduplication
@@ -126,7 +139,7 @@
 ## Future Integrations
 
 - Bot 2 Consultation AI handoff via real API/events/export.
-- Legal-data verification via Р¤РќРЎ.
+- Legal-data verification via ФНС.
 - Transcription via `faster-whisper` or `whisper.cpp`.
 - Telephony integration.
 - Legal discovery module

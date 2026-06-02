@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Added CRM user and roles foundation.
+- Added company and task assignment fields.
+- Added Telegram user auto-create and last-seen tracking.
+- Added minimal company self-assignment in Telegram.
+- Added assignment context to Bot 2 consultation payload.
+- Added minimal users and assignment API endpoints.
+- Added `scripts/smoke_users_roles.py`.
 - Added a new sales intelligence orchestration module with rule-based material scoring, closing-criteria readiness, SOPRANO questions, and AI-or-fallback cold call plans.
 - Added sales intelligence API endpoints for material score, closing criteria, SOPRANO questions, cold call plans, and latest payload reads.
 - Added sales intelligence Telegram workflow and company-card entrypoint.

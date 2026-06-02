@@ -7,6 +7,49 @@ from app.database import Base
 from app.modules.crm.constants import CompanyStatus, LeadPriority, TaskStatus
 
 
+class CRMUser(Base):
+    __tablename__ = "crm_users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    telegram_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, unique=True, index=True)
+    username: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    role: Mapped[str] = mapped_column(String(32), default="manager", index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    assigned_companies: Mapped[list["Company"]] = relationship(
+        back_populates="assigned_user",
+        foreign_keys="Company.assigned_user_id",
+    )
+    created_companies: Mapped[list["Company"]] = relationship(
+        back_populates="created_by_user",
+        foreign_keys="Company.created_by_user_id",
+    )
+    updated_companies: Mapped[list["Company"]] = relationship(
+        back_populates="updated_by_user",
+        foreign_keys="Company.updated_by_user_id",
+    )
+    assigned_tasks: Mapped[list["FollowUpTask"]] = relationship(
+        back_populates="assigned_user",
+        foreign_keys="FollowUpTask.assigned_user_id",
+    )
+    created_tasks: Mapped[list["FollowUpTask"]] = relationship(
+        back_populates="created_by_user",
+        foreign_keys="FollowUpTask.created_by_user_id",
+    )
+    created_interactions: Mapped[list["LeadInteraction"]] = relationship(
+        back_populates="created_by_user",
+        foreign_keys="LeadInteraction.created_by_user_id",
+    )
+
+
 class Company(Base):
     __tablename__ = "companies"
 
@@ -32,6 +75,9 @@ class Company(Base):
     status: Mapped[str] = mapped_column(String(64), default=CompanyStatus.NEW.value, index=True)
     priority: Mapped[str] = mapped_column(String(32), default=LeadPriority.MEDIUM.value, index=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    assigned_user_id: Mapped[int | None] = mapped_column(ForeignKey("crm_users.id", ondelete="SET NULL"), nullable=True, index=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("crm_users.id", ondelete="SET NULL"), nullable=True)
+    updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("crm_users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -78,6 +124,18 @@ class Company(Base):
     research_jobs: Mapped[list["ResearchJob"]] = relationship(
         back_populates="company",
         cascade="all, delete-orphan",
+    )
+    assigned_user: Mapped[CRMUser | None] = relationship(
+        back_populates="assigned_companies",
+        foreign_keys=[assigned_user_id],
+    )
+    created_by_user: Mapped[CRMUser | None] = relationship(
+        back_populates="created_companies",
+        foreign_keys=[created_by_user_id],
+    )
+    updated_by_user: Mapped[CRMUser | None] = relationship(
+        back_populates="updated_companies",
+        foreign_keys=[updated_by_user_id],
     )
 
 
@@ -141,11 +199,20 @@ class LeadInteraction(Base):
     next_action: Mapped[str | None] = mapped_column(Text, nullable=True)
     next_action_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("crm_users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     next_step: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     company: Mapped[Company] = relationship(back_populates="interactions")
     decision_maker: Mapped[DecisionMaker | None] = relationship(back_populates="interactions")
+    created_by_user: Mapped[CRMUser | None] = relationship(
+        back_populates="created_interactions",
+        foreign_keys=[created_by_user_id],
+    )
 
 
 class FollowUpTask(Base):
@@ -159,10 +226,20 @@ class FollowUpTask(Base):
     due_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(64), default=TaskStatus.OPEN.value, index=True)
     priority: Mapped[str] = mapped_column(String(32), default=LeadPriority.MEDIUM.value, index=True)
+    assigned_user_id: Mapped[int | None] = mapped_column(ForeignKey("crm_users.id", ondelete="SET NULL"), nullable=True, index=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("crm_users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     company: Mapped[Company] = relationship(back_populates="tasks")
+    assigned_user: Mapped[CRMUser | None] = relationship(
+        back_populates="assigned_tasks",
+        foreign_keys=[assigned_user_id],
+    )
+    created_by_user: Mapped[CRMUser | None] = relationship(
+        back_populates="created_tasks",
+        foreign_keys=[created_by_user_id],
+    )
 
 
 Task = FollowUpTask

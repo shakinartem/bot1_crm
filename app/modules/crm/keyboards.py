@@ -71,6 +71,7 @@ def company_actions(company_id: int) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="🔄 Сменить статус", callback_data=f"company:status:{company_id}"),
                 InlineKeyboardButton(text="✅ Добавить задачу", callback_data=f"company:task:{company_id}"),
             ],
+            [InlineKeyboardButton(text="👤 Назначить на себя", callback_data=f"company:assignme:{company_id}")],
             [
                 InlineKeyboardButton(text="📜 История", callback_data=f"company:history:{company_id}:0"),
                 InlineKeyboardButton(text="🤖 AI-подготовка", callback_data=f"company:ai:{company_id}"),
