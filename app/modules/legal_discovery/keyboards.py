@@ -30,6 +30,7 @@ def discovery_limit_markup() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="50", callback_data="discovery:limit:50")],
             [InlineKeyboardButton(text="100", callback_data="discovery:limit:100")],
             [InlineKeyboardButton(text="500", callback_data="discovery:limit:500")],
+            [InlineKeyboardButton(text="Назад", callback_data="discovery:back:provider")],
         ]
     )
 
@@ -52,5 +53,14 @@ def discovery_after_import_markup() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text="Запустить research", callback_data="research_queue:from_last_import")],
             [InlineKeyboardButton(text="Назад", callback_data="company:list")],
+        ]
+    )
+
+
+def discovery_browser_error_markup() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Назад", callback_data="discovery:back:provider")],
+            [InlineKeyboardButton(text="Mock / Dev", callback_data="discovery:provider:mock")],
         ]
     )

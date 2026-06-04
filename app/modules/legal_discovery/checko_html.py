@@ -13,7 +13,12 @@ from app.modules.legal_discovery.schemas import (
     LegalDiscoveryDirector,
     LegalDiscoveryFounder,
 )
-from app.modules.research.browser_backend import BrowserBackend, MockBrowserBackend, get_browser_backend
+from app.modules.research.browser_backend import (
+    BrowserBackend,
+    BrowserBackendError,
+    MockBrowserBackend,
+    get_browser_backend,
+)
 
 
 class CheckoHtmlLegalDiscoveryProvider:
@@ -60,6 +65,7 @@ class CheckoHtmlLegalDiscoveryProvider:
             list_items = []
             for url in urls:
                 page = await backend.fetch_page(url)
+                self._ensure_page_success(page, stage="list", url=url)
                 list_items.extend(parse_checko_list_page(page.html or "", self._settings.checko_html_base_url))
                 await self._maybe_delay()
 
@@ -74,10 +80,11 @@ class CheckoHtmlLegalDiscoveryProvider:
                         return
                     async with semaphore:
                         page = await backend.fetch_page(item.profile_url)
+                        self._ensure_page_success(page, stage="profile", url=item.profile_url)
                         profile_map[item.profile_url] = parse_checko_profile_page(page.html or "", self._settings.checko_html_base_url)
                         await self._maybe_delay()
 
-                await asyncio.gather(*(load_profile(item) for item in list_items), return_exceptions=True)
+                await asyncio.gather(*(load_profile(item) for item in list_items))
 
             companies: list[LegalDiscoveredCompany] = []
             for item in list_items:
@@ -116,6 +123,18 @@ class CheckoHtmlLegalDiscoveryProvider:
         delay_ms = max(0, self._settings.checko_html_page_delay_ms)
         if delay_ms:
             await asyncio.sleep(delay_ms / 1000)
+
+    def _ensure_page_success(self, page, *, stage: str, url: str) -> None:
+        if page.status == "success":
+            return
+        detail = page.error_message or f"browser backend returned status={page.status}"
+        status_code = 503
+        if page.status == "failed" and "disabled" in detail.lower():
+            status_code = 400
+        raise BrowserBackendError(
+            f"Checko HTML browser backend failed during {stage} fetch for {url}: {detail}",
+            status_code=status_code,
+        )
 
     def _merge_item(
         self,

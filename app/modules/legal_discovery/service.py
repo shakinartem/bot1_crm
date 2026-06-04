@@ -18,6 +18,7 @@ from app.modules.legal_discovery.schemas import (
     LegalDiscoveryPreview,
     LegalDiscoveryPreviewItem,
 )
+from app.modules.research.browser_backend import BrowserBackendError
 
 
 _PREVIEW_REGISTRY: dict[str, LegalDiscoveryPreview] = {}
@@ -44,18 +45,23 @@ async def run_legal_discovery_preview(
         provider = get_legal_discovery_provider(settings.model_copy(update={"legal_discovery_provider": provider_code}))
 
     search_limit = limit or settings.legal_discovery_default_limit
-    companies = await provider.search_companies(
-        query=query,
-        okved_code=okved_code,
-        okved_title=okved_title,
-        city=city,
-        region=region,
-        limit=search_limit,
-        only_main_okved=only_main_okved,
-        only_active=only_active,
-        include_profiles=include_profiles,
-        concurrency=concurrency,
-    )
+    try:
+        companies = await provider.search_companies(
+            query=query,
+            okved_code=okved_code,
+            okved_title=okved_title,
+            city=city,
+            region=region,
+            limit=search_limit,
+            only_main_okved=only_main_okved,
+            only_active=only_active,
+            include_profiles=include_profiles,
+            concurrency=concurrency,
+        )
+    except BrowserBackendError:
+        raise
+    except RuntimeError as exc:
+        raise BrowserBackendError(str(exc), status_code=503) from exc
     items = [await _build_preview_item(session, company) for company in companies]
 
     preview = LegalDiscoveryPreview(

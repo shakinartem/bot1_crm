@@ -22,7 +22,7 @@ from app.config import Settings  # noqa: E402
 from app.modules.legal_discovery.checko_html import CheckoHtmlLegalDiscoveryProvider  # noqa: E402
 from app.modules.legal_discovery.checko_parser import parse_checko_list_page, parse_checko_profile_page  # noqa: E402
 from app.modules.legal_discovery.okved_catalog import normalize_okved_code, resolve_okved_by_query  # noqa: E402
-from app.modules.research.browser_backend import MockBrowserBackend  # noqa: E402
+from app.modules.research.browser_backend import BrowserBackendError, DisabledBrowserBackend, MockBrowserBackend  # noqa: E402
 
 
 def read_fixture(name: str) -> str:
@@ -68,6 +68,22 @@ async def main() -> None:
     assert companies[0].inn == "6453001234", "provider must merge profile requisites"
     assert companies[0].director and companies[0].director.full_name == "Иванов Иван Иванович", "director must be mapped"
     assert companies[0].confidence == "high", "company with INN and OGRN must be high confidence"
+
+    failing_provider = CheckoHtmlLegalDiscoveryProvider(
+        Settings(
+            LEGAL_DISCOVERY_PROVIDER="checko_html",
+            CHECKO_HTML_ENABLED="1",
+            CHECKO_HTML_PAGE_DELAY_MS="0",
+            CHECKO_HTML_BASE_URL="https://checko.ru",
+        ),
+        browser_backend=DisabledBrowserBackend(),
+    )
+    try:
+        await failing_provider.search_companies(query="стоматология", okved_code="86.23", limit=1)
+    except BrowserBackendError as exc:
+        assert "browser backend failed" in str(exc).lower(), "provider must raise controlled browser backend error"
+    else:  # pragma: no cover - defensive
+        raise AssertionError("provider must raise a controlled error when browser backend fails")
 
     print("smoke_checko_html ok")
 

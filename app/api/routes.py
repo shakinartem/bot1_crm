@@ -122,6 +122,7 @@ from app.modules.research_queue.service import (
     run_research_batch,
     serialize_job,
 )
+from app.modules.research.browser_backend import BrowserBackendError
 from app.modules.sales_intelligence.schemas import (
     ClosingCriteriaReadiness,
     ColdCallPlan,
@@ -228,20 +229,23 @@ async def legal_discovery_search(
     payload: LegalDiscoverySearchRequest,
     session: AsyncSession = Depends(get_session),
 ):
-    return await run_legal_discovery_preview(
-        session,
-        query=payload.query,
-        okved_code=payload.okved_code,
-        okved_title=payload.okved_title,
-        city=payload.city,
-        region=payload.region,
-        limit=payload.limit,
-        only_main_okved=payload.only_main_okved,
-        only_active=payload.only_active,
-        include_profiles=payload.include_profiles,
-        concurrency=payload.concurrency,
-        provider_code=payload.provider,
-    )
+    try:
+        return await run_legal_discovery_preview(
+            session,
+            query=payload.query,
+            okved_code=payload.okved_code,
+            okved_title=payload.okved_title,
+            city=payload.city,
+            region=payload.region,
+            limit=payload.limit,
+            only_main_okved=payload.only_main_okved,
+            only_active=payload.only_active,
+            include_profiles=payload.include_profiles,
+            concurrency=payload.concurrency,
+            provider_code=payload.provider,
+        )
+    except BrowserBackendError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
 @api_router.get("/legal-discovery/okved/popular", response_model=list[PopularOkvedItem])

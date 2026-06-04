@@ -18,6 +18,7 @@ os.environ.setdefault("LEGAL_DISCOVERY_PROVIDER", "mock")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
+from app.config import get_settings  # noqa: E402
 from app.database import async_session_factory, create_db_schema  # noqa: E402
 from app.main import app  # noqa: E402
 from app.modules.crm.service import get_company  # noqa: E402
@@ -72,6 +73,22 @@ def verify_api() -> None:
             json={"preview_id": preview_payload["preview_id"], "mode": "active_new", "include_weak": False},
         )
         assert imported.status_code == 200, "import endpoint must work"
+
+        os.environ["LEGAL_DISCOVERY_PROVIDER"] = "checko_html"
+        os.environ["CHECKO_HTML_ENABLED"] = "1"
+        os.environ["BROWSER_BACKEND"] = "disabled"
+        get_settings.cache_clear()
+        browser_error = client.post(
+            "/api/legal-discovery/search",
+            json={
+                "query": "стоматология",
+                "okved_code": "86.23",
+                "limit": 1,
+                "provider": "checko_html",
+            },
+        )
+        assert browser_error.status_code in {400, 503}, "browser backend failure must be controlled"
+        assert "browser backend failed" in browser_error.json()["detail"].lower(), "API must expose readable backend failure"
 
 
 async def main() -> None:

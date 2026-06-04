@@ -50,6 +50,15 @@ Optional browser-backed discovery:
 - `CAMOUFOX_HEADLESS=true`
 - `CAMOUFOX_TIMEOUT=20`
 
+Live Checko HTML setup:
+
+- `python -m pip install -U "camoufox[geoip]"`
+- `python -m camoufox fetch`
+- `BROWSER_BACKEND=camoufox`
+- `CHECKO_HTML_ENABLED=true`
+- `CHECKO_HTML_HEADLESS=false`
+- `CAMOUFOX_HEADLESS=false`
+
 ## Run
 
 API:
@@ -93,6 +102,7 @@ Recommended defaults:
 - max concurrency cap: `30`
 - keep list pages near-sequential
 - treat live Checko/Yandex checks as manual only
+- first live Checko run: `CHECKO_HTML_CONCURRENCY=3` and `CHECKO_HTML_MAX_PAGES=1`
 
 Offline verification commands:
 

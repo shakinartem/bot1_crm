@@ -13,14 +13,21 @@ from app.database import async_session_factory
 from app.modules.crm.keyboards import CANCEL_TEXT, flow_menu, main_menu
 from app.modules.legal_discovery.keyboards import (
     discovery_after_import_markup,
+    discovery_browser_error_markup,
     discovery_limit_markup,
     discovery_niche_markup,
     discovery_preview_markup,
     discovery_provider_markup,
 )
 from app.modules.legal_discovery.service import get_legal_discovery_preview, import_legal_discovery_preview, run_legal_discovery_preview
+from app.modules.research.browser_backend import BrowserBackendError
 
 router = Router(name="legal_discovery")
+
+DISCOVERY_BROWSER_ERROR_TEXT = (
+    'Не удалось открыть Checko через браузерный backend. Проверьте BROWSER_BACKEND=camoufox '
+    'и установку Camoufox: python -m pip install -U "camoufox[geoip]" && python -m camoufox fetch'
+)
 
 
 class DiscoveryStates(StatesGroup):
@@ -38,6 +45,15 @@ async def discovery_start(message: Message, state: FSMContext) -> None:
         "источник → ОКВЭД → регион → лимит → preview → import.",
     )
     await message.answer("Выберите источник:", reply_markup=discovery_provider_markup())
+
+
+@router.callback_query(F.data == "discovery:back:provider")
+async def discovery_back_to_provider(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.set_state(None)
+    await state.update_data(discovery_provider=None)
+    if callback.message:
+        await _safe_edit_message(callback.message, "Выберите источник:", reply_markup=discovery_provider_markup())
+    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("discovery:provider:"))
@@ -100,15 +116,32 @@ async def discovery_run_preview(callback: CallbackQuery, state: FSMContext) -> N
     city = data.get("discovery_city")
     provider = data.get("discovery_provider")
     await _safe_edit_message(callback.message, "Ищу юрлица и собираю preview...")
-    async with async_session_factory() as session:
-        preview = await run_legal_discovery_preview(
-            session,
-            query=query,
-            city=city,
-            region=data.get("discovery_region"),
-            limit=limit,
-            provider_code=provider,
+    try:
+        async with async_session_factory() as session:
+            preview = await run_legal_discovery_preview(
+                session,
+                query=query,
+                city=city,
+                region=data.get("discovery_region"),
+                limit=limit,
+                provider_code=provider,
+            )
+    except BrowserBackendError:
+        await _safe_edit_message(
+            callback.message,
+            DISCOVERY_BROWSER_ERROR_TEXT,
+            reply_markup=discovery_browser_error_markup(),
         )
+        await callback.answer("Ошибка browser backend", show_alert=True)
+        return
+    except RuntimeError:
+        await _safe_edit_message(
+            callback.message,
+            DISCOVERY_BROWSER_ERROR_TEXT,
+            reply_markup=discovery_browser_error_markup(),
+        )
+        await callback.answer("Ошибка browser backend", show_alert=True)
+        return
     await state.update_data(last_discovery_preview_id=preview.preview_id)
     await _safe_edit_message(
         callback.message,
@@ -191,7 +224,8 @@ def _render_preview(preview) -> str:
     ]
     for index, item in enumerate(preview.items[:5], start=1):
         lines.append(
-            f"{index}. {item.company.legal_name} — ИНН {item.company.inn} — {item.company.status or 'unknown'} — {item.company.city or 'город не указан'}"
+            f"{index}. {item.company.legal_name} — ИНН {item.company.inn} — "
+            f"{item.company.status or 'unknown'} — {item.company.city or 'город не указан'}"
         )
     return "\n".join(lines)
 
