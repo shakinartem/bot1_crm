@@ -62,8 +62,9 @@ async def run_legal_discovery_preview(
         raise
     except RuntimeError as exc:
         raise BrowserBackendError(str(exc), status_code=503) from exc
-    items = [await _build_preview_item(session, company) for company in companies]
 
+    debug_info = dict(getattr(provider, "last_debug_info", {}) or {})
+    items = [await _build_preview_item(session, company) for company in companies]
     preview = LegalDiscoveryPreview(
         preview_id=str(uuid4()),
         query=query,
@@ -73,8 +74,9 @@ async def run_legal_discovery_preview(
         region=region,
         provider=provider.code,
         total_found=len(items),
-        active_count=sum(1 for item in items if _is_active(item.company)),
-        inactive_count=sum(1 for item in items if not _is_active(item.company)),
+        active_count=sum(1 for item in items if _company_status_kind(item.company) == "active"),
+        inactive_count=sum(1 for item in items if _company_status_kind(item.company) == "inactive"),
+        unknown_status_count=sum(1 for item in items if _company_status_kind(item.company) == "unknown"),
         with_inn_count=sum(1 for item in items if item.company.inn),
         with_ogrn_count=sum(1 for item in items if item.company.ogrn),
         with_phone_count=sum(1 for item in items if item.company.phones),
@@ -94,6 +96,10 @@ async def run_legal_discovery_preview(
         new_count=sum(1 for item in items if item.status == "new"),
         duplicate_count=sum(1 for item in items if item.status == "duplicate_existing"),
         weak_count=sum(1 for item in items if item.status == "weak_data"),
+        filtered_by_region_count=int(debug_info.get("filtered_by_region_count", 0) or 0),
+        skipped_not_company_count=int(debug_info.get("skipped_not_company_count", 0) or 0),
+        invalid_candidates_count=int(debug_info.get("invalid_candidates_count", 0) or 0),
+        debug_info=debug_info,
         items=items,
     )
     _PREVIEW_REGISTRY[preview.preview_id] = preview
@@ -197,8 +203,12 @@ async def _build_preview_item(session: AsyncSession, company: LegalDiscoveredCom
             duplicate_reason=_build_duplicate_reason(duplicate, company),
             warnings=warnings,
         )
-    if not _is_active(company):
+    status_kind = _company_status_kind(company)
+    if status_kind == "inactive":
         return LegalDiscoveryPreviewItem(status="inactive", company=company, warnings=warnings)
+    if status_kind == "unknown":
+        warnings.append("unknown_status")
+        return LegalDiscoveryPreviewItem(status="weak_data", company=company, warnings=warnings)
     if company.confidence == "low" or warnings:
         return LegalDiscoveryPreviewItem(status="weak_data", company=company, warnings=warnings)
     return LegalDiscoveryPreviewItem(status="new", company=company, warnings=warnings)
@@ -260,7 +270,11 @@ async def _sync_company_decision_maker(
 ) -> None:
     if not director or not director.full_name:
         return
-    note_parts = [part for part in [f"INN: {director.inn}" if director.inn else None, f"since: {director.since_date}" if director.since_date else None] if part]
+    note_parts = [
+        part
+        for part in [f"INN: {director.inn}" if director.inn else None, f"since: {director.since_date}" if director.since_date else None]
+        if part
+    ]
     session.add(
         DecisionMaker(
             company_id=company.id,
@@ -346,7 +360,16 @@ def _build_duplicate_reason(existing: Company, discovered: LegalDiscoveredCompan
 
 
 def _is_active(company: LegalDiscoveredCompany) -> bool:
-    return (company.status or "").lower() in {"active", "действует", "действующее", "registered"}
+    return (company.status or "").lower() in {"active", "действует", "зарегистрировано", "registered"}
+
+
+def _company_status_kind(company: LegalDiscoveredCompany) -> str:
+    if _is_active(company):
+        return "active"
+    lowered = (company.status or "").lower()
+    if lowered == "inactive" or "ликвид" in lowered or "прекращ" in lowered:
+        return "inactive"
+    return "unknown"
 
 
 def _compute_priority(company: LegalDiscoveredCompany) -> str:
@@ -354,14 +377,24 @@ def _compute_priority(company: LegalDiscoveredCompany) -> str:
 
 
 def _should_import_item(item: LegalDiscoveryPreviewItem, mode: str, include_weak: bool) -> bool:
+    has_requisites = bool(item.company.inn or item.company.ogrn)
+    unknown_status_only = item.status == "weak_data" and set(item.warnings).issubset({"unknown_status"})
     if mode == "active_new":
+        if not has_requisites:
+            return False
         if item.status == "weak_data" and not include_weak:
             return False
         return item.status in {"new", "weak_data"} and _is_active(item.company)
     if mode == "all_new":
-        return item.status in {"new", "weak_data", "inactive"} and (include_weak or item.status != "weak_data")
+        if not has_requisites:
+            return False
+        if item.status == "weak_data" and not include_weak and not unknown_status_only:
+            return False
+        return item.status in {"new", "weak_data", "inactive"}
     if mode == "new_with_websites":
-        return bool(item.company.websites) and item.status in {"new", "weak_data"} and (include_weak or item.status != "weak_data")
+        return has_requisites and bool(item.company.websites) and item.status in {"new", "weak_data"} and (include_weak or item.status != "weak_data")
     if mode == "new_with_phone_or_website":
-        return bool(item.company.phones or item.company.websites) and item.status in {"new", "weak_data"} and (include_weak or item.status != "weak_data")
+        return has_requisites and bool(item.company.phones or item.company.websites) and item.status in {"new", "weak_data"} and (
+            include_weak or item.status != "weak_data"
+        )
     return False

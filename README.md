@@ -104,6 +104,13 @@ Recommended defaults:
 - treat live Checko/Yandex checks as manual only
 - first live Checko run: `CHECKO_HTML_CONCURRENCY=3` and `CHECKO_HTML_MAX_PAGES=1`
 
+### Live Checko validation
+
+- Start with `limit=5-10`, `CHECKO_HTML_MAX_PAGES=1`, and `CHECKO_HTML_CONCURRENCY=3`.
+- The region filter is validated again after parsing, so off-region cards are excluded even if Checko shows them.
+- Category-like rows, headers, breadcrumbs, and `Организации 1-50` blocks are skipped before preview.
+- Unknown company status is tracked separately and is not counted as inactive.
+
 Offline verification commands:
 
 ```bash

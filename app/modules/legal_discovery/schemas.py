@@ -82,6 +82,7 @@ class LegalDiscoveryPreview(BaseModel):
     total_found: int
     active_count: int
     inactive_count: int
+    unknown_status_count: int = 0
     with_inn_count: int = 0
     with_ogrn_count: int = 0
     with_phone_count: int = 0
@@ -93,6 +94,10 @@ class LegalDiscoveryPreview(BaseModel):
     new_count: int
     duplicate_count: int
     weak_count: int
+    filtered_by_region_count: int = 0
+    skipped_not_company_count: int = 0
+    invalid_candidates_count: int = 0
+    debug_info: dict[str, Any] = Field(default_factory=dict)
     items: list[LegalDiscoveryPreviewItem] = Field(default_factory=list)
 
 

@@ -23,7 +23,7 @@ from app.database import async_session_factory, create_db_schema  # noqa: E402
 from app.main import app  # noqa: E402
 from app.modules.crm.service import get_company  # noqa: E402
 from app.modules.legal_discovery.keyboards import discovery_preview_markup  # noqa: E402
-from app.modules.legal_discovery.handlers import build_discovery_browser_error_text  # noqa: E402
+from app.modules.legal_discovery.handlers import _render_preview, build_discovery_browser_error_text  # noqa: E402
 from app.modules.legal_discovery.service import import_legal_discovery_preview, preview_callback_token, run_legal_discovery_preview  # noqa: E402
 
 
@@ -108,11 +108,33 @@ def verify_browser_error_texts() -> None:
 
 def verify_preview_markup() -> None:
     markup = discovery_preview_markup("12345678")
+    labels = [button.text for row in markup.inline_keyboard for button in row]
+    assert "Импортировать активные новые" in labels, "preview button labels must be localized"
+    assert "Импортировать все новые" in labels, "preview button labels must be localized"
+    assert "Импортировать с телефоном или сайтом" in labels, "preview button labels must be localized"
+    assert "Экспорт preview CSV" in labels, "preview button labels must be localized"
     for row in markup.inline_keyboard:
         for button in row:
             assert button.callback_data is not None and len(button.callback_data.encode("utf-8")) <= 64, (
                 "preview callback_data must fit Telegram 64-byte limit"
             )
+
+
+async def verify_preview_render() -> None:
+    async with async_session_factory() as session:
+        preview = await run_legal_discovery_preview(
+            session,
+            query="",
+            okved_code="86.23",
+            limit=5,
+            provider_code="mock",
+        )
+    rendered = _render_preview(preview)
+    assert "Найдено компаний" in rendered, "preview wording must say companies"
+    assert "Статус неизвестен" in rendered, "preview must include unknown status counter"
+    assert "Отфильтровано по региону" in rendered, "preview must include region filter counter"
+    assert "Отброшено как не компания" in rendered, "preview must include skipped non-company counter"
+    assert "Медицинская и стоматологическая практика" not in rendered, "preview must not show category-like rows"
 
 
 async def main() -> None:
@@ -124,6 +146,7 @@ async def main() -> None:
     verify_api()
     verify_browser_error_texts()
     verify_preview_markup()
+    await verify_preview_render()
     print("smoke_legal_discovery ok")
 
 

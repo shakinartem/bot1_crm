@@ -41,6 +41,9 @@ DISCOVERY_BROWSER_ERROR_RUNTIME_TEXT = (
     "Не удалось открыть Checko через браузерный backend. "
     "Camoufox запустился, но не смог загрузить страницу. Попробуйте CAMOUFOX_HEADLESS=true и повторите попытку."
 )
+DISCOVERY_BROWSER_ERROR_PARSE_TEXT = (
+    "Не удалось корректно разобрать выдачу Checko. Попробуйте меньший лимит, другой регион или Mock / Dev."
+)
 
 
 class DiscoveryStates(StatesGroup):
@@ -128,7 +131,7 @@ async def discovery_run_preview(callback: CallbackQuery, state: FSMContext) -> N
     query = data.get("discovery_query") or "стоматология"
     city = data.get("discovery_city")
     provider = data.get("discovery_provider")
-    await _safe_edit_message(callback.message, "Ищу юрлица и собираю preview...")
+    await _safe_edit_message(callback.message, "Ищу компании и собираю preview...")
     try:
         async with async_session_factory() as session:
             preview = await run_legal_discovery_preview(
@@ -226,19 +229,26 @@ def _render_preview(preview) -> str:
     lines = [
         "🔍 Поиск компаний завершён",
         "",
-        f"Найдено юрлиц: {preview.total_found}",
+        f"Найдено компаний: {preview.total_found}",
         f"Активных: {preview.active_count}",
         f"Неактивных: {preview.inactive_count}",
+        f"Статус неизвестен: {preview.unknown_status_count}",
         f"Новых для CRM: {preview.new_count}",
         f"Дублей в CRM: {preview.duplicate_count}",
+        f"С ИНН: {preview.with_inn_count}",
+        f"С ОГРН: {preview.with_ogrn_count}",
+        f"С сайтами: {preview.with_website_count}",
+        f"С телефонами: {preview.with_phone_count}",
         f"Слабые данные: {preview.weak_count}",
+        f"Отфильтровано по региону: {preview.filtered_by_region_count}",
+        f"Отброшено как не компания: {preview.skipped_not_company_count}",
         "",
         "Первые результаты:",
     ]
     for index, item in enumerate(preview.items[:5], start=1):
         lines.append(
-            f"{index}. {item.company.legal_name} — ИНН {item.company.inn} — "
-            f"{item.company.status or 'unknown'} — {item.company.city or 'город не указан'}"
+            f"{index}. {item.company.legal_name} — ИНН {item.company.inn or '-'} — "
+            f"{item.company.status or 'unknown'} — {item.company.city or item.company.region or 'регион не указан'}"
         )
     return "\n".join(lines)
 
@@ -249,6 +259,8 @@ def build_discovery_browser_error_text(exc: Exception) -> str:
         return DISCOVERY_BROWSER_ERROR_TIMEOUT_TEXT
     if "not installed" in detail or "not fetched" in detail:
         return DISCOVERY_BROWSER_ERROR_INSTALL_TEXT
+    if "parse" in detail or "разобрать" in detail:
+        return DISCOVERY_BROWSER_ERROR_PARSE_TEXT
     return DISCOVERY_BROWSER_ERROR_RUNTIME_TEXT
 
 

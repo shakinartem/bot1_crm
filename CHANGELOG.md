@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Fixed Checko live parsing to skip category/header rows.
+- Added region post-filter for Checko results.
+- Improved active/inactive/unknown counters.
+- Localized discovery preview actions.
+- Hardened import safety for weak/unknown candidates.
 - Localized sales intelligence user-facing outputs to Russian.
 - Added Russian package display names for proposal suggestions and manual selection.
 - Improved Bot2 authorization documentation, Swagger description, and 401 error hint.

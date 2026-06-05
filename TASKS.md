@@ -129,6 +129,11 @@
 - Grouped Telegram main menu
 - Search companies menu entry
 - Localization smoke test
+- Fixed Checko category/header parsing
+- Added Checko region post-filter
+- Improved Checko preview counters
+- Localized Checko preview buttons
+- Hardened Checko import safety
 
 ## Bugs
 

@@ -38,11 +38,11 @@ def discovery_limit_markup() -> InlineKeyboardMarkup:
 def discovery_preview_markup(preview_id: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Импортировать active new", callback_data=f"discovery:import:{preview_id}:active_new")],
-            [InlineKeyboardButton(text="Импортировать все new", callback_data=f"discovery:import:{preview_id}:all_new")],
+            [InlineKeyboardButton(text="Импортировать активные новые", callback_data=f"discovery:import:{preview_id}:active_new")],
+            [InlineKeyboardButton(text="Импортировать все новые", callback_data=f"discovery:import:{preview_id}:all_new")],
             [InlineKeyboardButton(text="Импортировать с сайтами", callback_data=f"discovery:import:{preview_id}:new_with_websites")],
-            [InlineKeyboardButton(text="Импортировать phone/site", callback_data=f"discovery:import:{preview_id}:new_with_phone_or_website")],
-            [InlineKeyboardButton(text="Экспортировать preview CSV", callback_data=f"discovery:export:{preview_id}")],
+            [InlineKeyboardButton(text="Импортировать с телефоном или сайтом", callback_data=f"discovery:import:{preview_id}:new_with_phone_or_website")],
+            [InlineKeyboardButton(text="Экспорт preview CSV", callback_data=f"discovery:export:{preview_id}")],
             [InlineKeyboardButton(text="Отмена", callback_data="discovery:cancel")],
         ]
     )

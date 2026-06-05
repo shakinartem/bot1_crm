@@ -17,6 +17,31 @@ JSON_LD_RE = re.compile(
     r"""<script[^>]+type=["']application/ld\+json["'][^>]*>(?P<body>.*?)</script>""",
     re.IGNORECASE | re.DOTALL,
 )
+COMPANY_BLOCK_RE = re.compile(
+    r"""<(?:div|article|section)[^>]+class=["'][^"']*(?:company|org|card|category|breadcrumb)[^"']*["'][^>]*>(?P<body>.*?)</(?:div|article|section)>""",
+    re.IGNORECASE | re.DOTALL,
+)
+
+ORG_PREFIXES = ("ооо", "ао", "пао", "зао", "ип", "нко", "чуз", "ано", "гбу", "мбу", "фгбу")
+CATEGORY_MARKERS = (
+    "деятельность в области здравоохранения",
+    "медицинская и стоматологическая практика",
+    "организации 1-50",
+    "описание категории",
+    "оквэд",
+    "категория",
+    "раздел",
+)
+COMPANY_SIGNAL_MARKERS = (
+    "адрес",
+    "директор",
+    "генеральный директор",
+    "руководитель",
+    "дата регистрации",
+    "статус",
+    "инн",
+    "огрн",
+)
 
 
 @dataclass(slots=True)
@@ -68,34 +93,66 @@ class CheckoListItem:
     director_role: str | None = None
     registration_date: str | None = None
     status: str | None = None
+    raw_text: str | None = None
     warnings: list[str] = field(default_factory=list)
 
 
-def parse_checko_list_page(html_text: str, base_url: str = CHECKO_BASE_URL) -> list[CheckoListItem]:
+def parse_checko_list_page(html_text: str, base_url: str = CHECKO_BASE_URL, *, debug: dict[str, Any] | None = None) -> list[CheckoListItem]:
+    stats = debug if debug is not None else {}
+    stats.setdefault("skipped_category_like_item", 0)
+    stats.setdefault("skipped_missing_profile_url", 0)
+    stats.setdefault("skipped_missing_name", 0)
+
     items: list[CheckoListItem] = []
-    for match in LINK_RE.finditer(html_text):
-        href = html.unescape(match.group("href")).strip()
-        if "/company/" not in href:
+    for block in _extract_candidate_blocks(html_text):
+        link_match = LINK_RE.search(block)
+        if not link_match:
             continue
-        label = _clean_text(match.group("label"))
-        if not label:
+        href = html.unescape(link_match.group("href")).strip()
+        label = _clean_text(link_match.group("label"))
+        cleaned_block = _clean_text(block)
+
+        if not _is_company_profile_href(href):
+            if _looks_like_company_candidate(label, cleaned_block):
+                stats["skipped_missing_profile_url"] += 1
             continue
-        block = _extract_nearby_block(html_text, match.start(), match.end())
+
         item = CheckoListItem(
-            legal_name=label,
-            short_name=label,
+            legal_name=label or None,
+            short_name=label or None,
             profile_url=urljoin(base_url, href),
-            address=_extract_labeled_value(block, ["Адрес"]),
-            director_name=_extract_labeled_value(block, ["Директор", "Генеральный директор", "Руководитель"]),
-            director_role=_extract_director_role(block),
-            registration_date=_extract_labeled_value(block, ["Дата регистрации"]),
-            status=_extract_status(block),
+            address=_extract_labeled_value(cleaned_block, ["Адрес"]),
+            director_name=_extract_labeled_value(cleaned_block, ["Директор", "Генеральный директор", "Руководитель"]),
+            director_role=_extract_director_role(cleaned_block),
+            registration_date=_extract_labeled_value(cleaned_block, ["Дата регистрации"]),
+            status=_extract_status(cleaned_block),
+            raw_text=cleaned_block,
             warnings=[],
         )
         if not item.address:
             item.warnings.append("missing_address")
+        rejection_reason = _get_checko_company_rejection_reason(item)
+        if rejection_reason == "missing_profile_url":
+            stats["skipped_missing_profile_url"] += 1
+            continue
+        if rejection_reason == "missing_name":
+            stats["skipped_missing_name"] += 1
+            continue
+        if rejection_reason:
+            stats["skipped_category_like_item"] += 1
+            continue
         items.append(item)
-    return _dedupe_list_items(items)
+
+    deduped = _dedupe_list_items(items)
+    stats["parsed_candidates_count"] = len(deduped)
+    stats["skipped_not_company_count"] = (
+        stats["skipped_category_like_item"] + stats["skipped_missing_profile_url"] + stats["skipped_missing_name"]
+    )
+    return deduped
+
+
+def is_probable_checko_company_item(item: CheckoListItem) -> bool:
+    return _get_checko_company_rejection_reason(item) is None
 
 
 def parse_checko_profile_page(html_text: str, base_url: str = CHECKO_BASE_URL) -> CheckoProfileData:
@@ -117,7 +174,7 @@ def parse_checko_profile_page(html_text: str, base_url: str = CHECKO_BASE_URL) -
         checko_profile_url=_extract_canonical_url(html_text) or _extract_jsonld_url(html_text),
         text_excerpt=text[:1500] or None,
     )
-    for href, label in _extract_links(html_text, base_url):
+    for href, _label in _extract_links(html_text, base_url):
         lowered = href.lower()
         if "telegram" in lowered or "t.me/" in lowered:
             profile.telegram_links.append(href)
@@ -144,6 +201,12 @@ def parse_checko_profile_page(html_text: str, base_url: str = CHECKO_BASE_URL) -
         _apply_jsonld_fallback(profile, html_text)
     if not profile.inn:
         profile.warnings.append("missing_inn")
+    if not profile.ogrn:
+        profile.warnings.append("missing_ogrn")
+    if not profile.legal_name:
+        profile.warnings.append("missing_legal_name")
+    if not profile.short_name:
+        profile.warnings.append("missing_short_name")
     return profile
 
 
@@ -241,6 +304,22 @@ def _extract_nearby_block(html_text: str, start: int, end: int) -> str:
     return _clean_text(html_text[left:right])
 
 
+def _extract_candidate_blocks(html_text: str) -> list[str]:
+    blocks = [match.group("body") for match in COMPANY_BLOCK_RE.finditer(html_text)]
+    if blocks:
+        return blocks
+    return [_extract_nearby_block(html_text, match.start(), match.end()) for match in LINK_RE.finditer(html_text)]
+
+
+def _is_company_profile_href(href: str | None) -> bool:
+    normalized = (href or "").strip().lower()
+    if "/company/" not in normalized:
+        return False
+    if normalized.startswith("/company/select") or "/company/select?" in normalized:
+        return False
+    return not normalized.endswith("/company/")
+
+
 def _extract_canonical_url(html_text: str) -> str | None:
     match = re.search(r"""<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']""", html_text, re.IGNORECASE)
     return html.unescape(match.group(1)).strip() if match else None
@@ -269,7 +348,7 @@ def _extract_okved_name(text: str) -> str | None:
 
 
 def _extract_status(text: str) -> str | None:
-    lowered = text.lower()
+    lowered = _normalize_checko_text(text)
     if "действует" in lowered:
         return "active"
     if "ликвид" in lowered or "прекращ" in lowered:
@@ -278,8 +357,9 @@ def _extract_status(text: str) -> str | None:
 
 
 def _extract_director_role(text: str) -> str | None:
+    lowered = _normalize_checko_text(text)
     for label in ("Генеральный директор", "Директор", "Руководитель"):
-        if label.lower() in text.lower():
+        if _normalize_checko_text(label) in lowered:
             return label
     return None
 
@@ -358,3 +438,51 @@ def _dedupe_list_items(items: list[CheckoListItem]) -> list[CheckoListItem]:
         seen.add(key)
         result.append(item)
     return result
+
+
+def _normalize_checko_text(value: str | None) -> str:
+    text = html.unescape((value or "").strip()).lower().replace("ё", "е")
+    text = re.sub(r"[\"'«»“”„]", " ", text)
+    text = re.sub(r"[^\w\s/-]+", " ", text, flags=re.UNICODE)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+
+def _looks_like_company_candidate(label: str | None, raw_text: str | None) -> bool:
+    normalized_label = _normalize_checko_text(label)
+    normalized_raw = _normalize_checko_text(raw_text)
+    return _starts_with_org_form(normalized_label) or _has_company_signals(normalized_raw)
+
+
+def _get_checko_company_rejection_reason(item: CheckoListItem) -> str | None:
+    if not item.profile_url:
+        return "missing_profile_url"
+    if not _is_company_profile_href(item.profile_url):
+        return "category_like_item"
+    normalized_name = _normalize_checko_text(item.legal_name)
+    normalized_raw = _normalize_checko_text(item.raw_text)
+    if not normalized_name:
+        return "missing_name"
+    if _is_category_like_text(normalized_name) and not _has_company_signals(normalized_raw):
+        return "category_like_item"
+    if _contains_company_range_only(normalized_name) or _contains_company_range_only(normalized_raw):
+        return "category_like_item"
+    if not _starts_with_org_form(normalized_name) and not _has_company_signals(normalized_raw):
+        return "category_like_item"
+    return None
+
+
+def _starts_with_org_form(normalized_name: str) -> bool:
+    return any(normalized_name.startswith(prefix + " ") or normalized_name == prefix for prefix in ORG_PREFIXES)
+
+
+def _is_category_like_text(normalized_text: str) -> bool:
+    return any(marker in normalized_text for marker in CATEGORY_MARKERS)
+
+
+def _contains_company_range_only(normalized_text: str) -> bool:
+    return bool(re.search(r"организации\s+\d+\s*-\s*\d+", normalized_text))
+
+
+def _has_company_signals(normalized_text: str) -> bool:
+    return any(marker in normalized_text for marker in COMPANY_SIGNAL_MARKERS)
