@@ -19,14 +19,27 @@ from app.modules.legal_discovery.keyboards import (
     discovery_preview_markup,
     discovery_provider_markup,
 )
-from app.modules.legal_discovery.service import get_legal_discovery_preview, import_legal_discovery_preview, run_legal_discovery_preview
+from app.modules.legal_discovery.service import (
+    get_legal_discovery_preview,
+    import_legal_discovery_preview,
+    preview_callback_token,
+    run_legal_discovery_preview,
+)
 from app.modules.research.browser_backend import BrowserBackendError
 
 router = Router(name="legal_discovery")
 
-DISCOVERY_BROWSER_ERROR_TEXT = (
+DISCOVERY_BROWSER_ERROR_INSTALL_TEXT = (
     'Не удалось открыть Checko через браузерный backend. Проверьте BROWSER_BACKEND=camoufox '
     'и установку Camoufox: python -m pip install -U "camoufox[geoip]" && python -m camoufox fetch'
+)
+DISCOVERY_BROWSER_ERROR_TIMEOUT_TEXT = (
+    "Checko отвечает слишком долго через браузерный backend. "
+    "Попробуйте CAMOUFOX_HEADLESS=true, уменьшите CHECKO_HTML_MAX_PAGES до 1 и CHECKO_HTML_CONCURRENCY до 3."
+)
+DISCOVERY_BROWSER_ERROR_RUNTIME_TEXT = (
+    "Не удалось открыть Checko через браузерный backend. "
+    "Camoufox запустился, но не смог загрузить страницу. Попробуйте CAMOUFOX_HEADLESS=true и повторите попытку."
 )
 
 
@@ -53,7 +66,7 @@ async def discovery_back_to_provider(callback: CallbackQuery, state: FSMContext)
     await state.update_data(discovery_provider=None)
     if callback.message:
         await _safe_edit_message(callback.message, "Выберите источник:", reply_markup=discovery_provider_markup())
-    await callback.answer()
+    await _safe_callback_answer(callback)
 
 
 @router.callback_query(F.data.startswith("discovery:provider:"))
@@ -63,7 +76,7 @@ async def discovery_pick_provider(callback: CallbackQuery, state: FSMContext) ->
     provider = callback.data.rsplit(":", 1)[-1]
     await state.update_data(discovery_provider=provider)
     await _safe_edit_message(callback.message, "Выберите ОКВЭД или нишу:", reply_markup=discovery_niche_markup())
-    await callback.answer()
+    await _safe_callback_answer(callback)
 
 
 @router.callback_query(F.data.startswith("discovery:niche:"))
@@ -74,12 +87,12 @@ async def discovery_pick_niche(callback: CallbackQuery, state: FSMContext) -> No
     if niche == "manual":
         await state.set_state(DiscoveryStates.niche_manual)
         await callback.message.answer("Введите ОКВЭД или нишу вручную.", reply_markup=flow_menu())
-        await callback.answer()
+        await _safe_callback_answer(callback)
         return
     await state.update_data(discovery_query=niche)
     await state.set_state(DiscoveryStates.city)
     await callback.message.answer("Введите город или регион одним сообщением.", reply_markup=flow_menu())
-    await callback.answer()
+    await _safe_callback_answer(callback)
 
 
 @router.message(DiscoveryStates.niche_manual)
@@ -126,29 +139,29 @@ async def discovery_run_preview(callback: CallbackQuery, state: FSMContext) -> N
                 limit=limit,
                 provider_code=provider,
             )
-    except BrowserBackendError:
+    except BrowserBackendError as exc:
         await _safe_edit_message(
             callback.message,
-            DISCOVERY_BROWSER_ERROR_TEXT,
+            build_discovery_browser_error_text(exc),
             reply_markup=discovery_browser_error_markup(),
         )
-        await callback.answer("Ошибка browser backend", show_alert=True)
+        await _safe_callback_answer(callback, "Ошибка browser backend", show_alert=True)
         return
-    except RuntimeError:
+    except RuntimeError as exc:
         await _safe_edit_message(
             callback.message,
-            DISCOVERY_BROWSER_ERROR_TEXT,
+            build_discovery_browser_error_text(exc),
             reply_markup=discovery_browser_error_markup(),
         )
-        await callback.answer("Ошибка browser backend", show_alert=True)
+        await _safe_callback_answer(callback, "Ошибка browser backend", show_alert=True)
         return
     await state.update_data(last_discovery_preview_id=preview.preview_id)
     await _safe_edit_message(
         callback.message,
         _render_preview(preview),
-        reply_markup=discovery_preview_markup(preview.preview_id),
+        reply_markup=discovery_preview_markup(preview_callback_token(preview.preview_id)),
     )
-    await callback.answer("Preview готов.")
+    await _safe_callback_answer(callback, "Preview готов.")
 
 
 @router.callback_query(F.data.startswith("discovery:import:"))
@@ -168,7 +181,7 @@ async def discovery_import(callback: CallbackQuery, state: FSMContext) -> None:
         f"Ошибки: {result.errors_count}"
     )
     await _safe_edit_message(callback.message, text, reply_markup=discovery_after_import_markup())
-    await callback.answer("Импорт выполнен.")
+    await _safe_callback_answer(callback, "Импорт выполнен.")
 
 
 @router.callback_query(F.data.startswith("discovery:export:"))
@@ -178,7 +191,7 @@ async def discovery_export(callback: CallbackQuery) -> None:
     preview_id = callback.data.rsplit(":", 1)[-1]
     preview = get_legal_discovery_preview(preview_id)
     if not preview:
-        await callback.answer("Preview уже недоступен.", show_alert=True)
+        await _safe_callback_answer(callback, "Preview уже недоступен.", show_alert=True)
         return
     buffer = StringIO()
     writer = csv.writer(buffer)
@@ -198,13 +211,13 @@ async def discovery_export(callback: CallbackQuery) -> None:
     data = buffer.getvalue().encode("utf-8")
     file = BufferedInputFile(data, filename=f"legal_discovery_preview_{preview.preview_id[:8]}.csv")
     await callback.message.answer_document(file, caption="Preview CSV")
-    await callback.answer("CSV экспортирован.")
+    await _safe_callback_answer(callback, "CSV экспортирован.")
 
 
 @router.callback_query(F.data == "discovery:cancel")
 async def discovery_cancel(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
-    await callback.answer("Отменено.")
+    await _safe_callback_answer(callback, "Отменено.")
     if callback.message:
         await callback.message.answer("Поиск компаний отменён.", reply_markup=main_menu())
 
@@ -230,6 +243,15 @@ def _render_preview(preview) -> str:
     return "\n".join(lines)
 
 
+def build_discovery_browser_error_text(exc: Exception) -> str:
+    detail = str(exc).lower()
+    if "timed out" in detail or "timeout" in detail:
+        return DISCOVERY_BROWSER_ERROR_TIMEOUT_TEXT
+    if "not installed" in detail or "not fetched" in detail:
+        return DISCOVERY_BROWSER_ERROR_INSTALL_TEXT
+    return DISCOVERY_BROWSER_ERROR_RUNTIME_TEXT
+
+
 async def _safe_edit_message(message: Message, text: str, *, reply_markup=None) -> None:
     try:
         await message.edit_text(text, reply_markup=reply_markup)
@@ -237,3 +259,17 @@ async def _safe_edit_message(message: Message, text: str, *, reply_markup=None) 
         if "message is not modified" not in str(exc):
             raise
         await message.edit_reply_markup(reply_markup=reply_markup)
+
+
+async def _safe_callback_answer(callback: CallbackQuery, text: str | None = None, *, show_alert: bool = False) -> None:
+    try:
+        await callback.answer(text, show_alert=show_alert)
+    except TelegramBadRequest as exc:
+        if _is_expired_callback_error(exc):
+            return
+        raise
+
+
+def _is_expired_callback_error(exc: TelegramBadRequest) -> bool:
+    detail = str(exc).lower()
+    return "query is too old" in detail or "query id is invalid" in detail or "response timeout expired" in detail

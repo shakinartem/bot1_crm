@@ -101,7 +101,7 @@ async def run_legal_discovery_preview(
 
 
 def get_legal_discovery_preview(preview_id: str) -> LegalDiscoveryPreview | None:
-    return _PREVIEW_REGISTRY.get(preview_id)
+    return _resolve_preview(preview_id)
 
 
 async def import_legal_discovery_preview(
@@ -113,6 +113,8 @@ async def import_legal_discovery_preview(
     run_research_after_import: bool = False,
 ) -> LegalDiscoveryImportResult:
     preview = _PREVIEW_REGISTRY.get(preview_id)
+    if not preview:
+        preview = _resolve_preview(preview_id)
     if not preview:
         raise ValueError("Preview not found")
 
@@ -164,6 +166,20 @@ async def import_legal_discovery_preview(
 
         await create_research_jobs_for_companies(session, result.added_company_ids)
     return result
+
+
+def preview_callback_token(preview_id: str) -> str:
+    return preview_id.split("-", 1)[0]
+
+
+def _resolve_preview(preview_ref: str) -> LegalDiscoveryPreview | None:
+    preview = _PREVIEW_REGISTRY.get(preview_ref)
+    if preview:
+        return preview
+    matches = [item for key, item in _PREVIEW_REGISTRY.items() if key.startswith(preview_ref)]
+    if len(matches) == 1:
+        return matches[0]
+    return None
 
 
 async def _build_preview_item(session: AsyncSession, company: LegalDiscoveredCompany) -> LegalDiscoveryPreviewItem:

@@ -22,7 +22,9 @@ from app.config import get_settings  # noqa: E402
 from app.database import async_session_factory, create_db_schema  # noqa: E402
 from app.main import app  # noqa: E402
 from app.modules.crm.service import get_company  # noqa: E402
-from app.modules.legal_discovery.service import import_legal_discovery_preview, run_legal_discovery_preview  # noqa: E402
+from app.modules.legal_discovery.keyboards import discovery_preview_markup  # noqa: E402
+from app.modules.legal_discovery.handlers import build_discovery_browser_error_text  # noqa: E402
+from app.modules.legal_discovery.service import import_legal_discovery_preview, preview_callback_token, run_legal_discovery_preview  # noqa: E402
 
 
 async def verify_service() -> str:
@@ -47,6 +49,8 @@ async def verify_service() -> str:
 
         second_import = await import_legal_discovery_preview(session, preview.preview_id, "active_new")
         assert second_import.added_count == 0, "repeated import must not create duplicates"
+        short_import = await import_legal_discovery_preview(session, preview_callback_token(preview.preview_id), "active_new")
+        assert short_import.added_count == 0, "short preview token must resolve to the same preview"
         return preview.preview_id
 
 
@@ -91,6 +95,26 @@ def verify_api() -> None:
         assert "browser backend failed" in browser_error.json()["detail"].lower(), "API must expose readable backend failure"
 
 
+def verify_browser_error_texts() -> None:
+    timeout_text = build_discovery_browser_error_text(RuntimeError("Camoufox timed out after 20000 ms"))
+    assert "слишком долго" in timeout_text.lower(), "timeout must render as a manager-facing timeout hint"
+
+    install_text = build_discovery_browser_error_text(RuntimeError("Camoufox is not installed"))
+    assert "camoufox fetch" in install_text.lower(), "install error must keep setup instructions"
+
+    runtime_text = build_discovery_browser_error_text(RuntimeError("Camoufox fetch failed: [WinError 5] Access denied"))
+    assert "camoufox запустился" in runtime_text.lower(), "runtime launch error must not be shown as install guidance"
+
+
+def verify_preview_markup() -> None:
+    markup = discovery_preview_markup("12345678")
+    for row in markup.inline_keyboard:
+        for button in row:
+            assert button.callback_data is not None and len(button.callback_data.encode("utf-8")) <= 64, (
+                "preview callback_data must fit Telegram 64-byte limit"
+            )
+
+
 async def main() -> None:
     smoke_db = ROOT / "app_legal_discovery_smoke.db"
     if smoke_db.exists():
@@ -98,6 +122,8 @@ async def main() -> None:
     await create_db_schema()
     await verify_service()
     verify_api()
+    verify_browser_error_texts()
+    verify_preview_markup()
     print("smoke_legal_discovery ok")
 
 
