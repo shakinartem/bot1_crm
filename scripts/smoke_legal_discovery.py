@@ -22,8 +22,9 @@ from app.config import get_settings  # noqa: E402
 from app.database import async_session_factory, create_db_schema  # noqa: E402
 from app.main import app  # noqa: E402
 from app.modules.crm.service import get_company  # noqa: E402
-from app.modules.legal_discovery.keyboards import discovery_preview_markup  # noqa: E402
 from app.modules.legal_discovery.handlers import _render_preview, build_discovery_browser_error_text  # noqa: E402
+from app.modules.legal_discovery.keyboards import discovery_preview_markup, discovery_zero_result_markup  # noqa: E402
+from app.modules.legal_discovery.schemas import LegalDiscoveryPreview  # noqa: E402
 from app.modules.legal_discovery.service import import_legal_discovery_preview, preview_callback_token, run_legal_discovery_preview  # noqa: E402
 
 
@@ -120,6 +121,15 @@ def verify_preview_markup() -> None:
             )
 
 
+def verify_zero_result_markup() -> None:
+    markup = discovery_zero_result_markup()
+    labels = [button.text for row in markup.inline_keyboard for button in row]
+    assert "Повторить с меньшим лимитом" in labels, "zero-result actions must be localized"
+    assert "Повторить без региона" in labels, "zero-result actions must be localized"
+    assert "Mock / Dev" in labels, "zero-result actions must include Mock / Dev"
+    assert "Назад" in labels, "zero-result actions must include back"
+
+
 async def verify_preview_render() -> None:
     async with async_session_factory() as session:
         preview = await run_legal_discovery_preview(
@@ -137,6 +147,51 @@ async def verify_preview_render() -> None:
     assert "Медицинская и стоматологическая практика" not in rendered, "preview must not show category-like rows"
 
 
+def verify_zero_result_render() -> None:
+    preview = LegalDiscoveryPreview(
+        preview_id="preview-zero",
+        query="стоматология",
+        okved_code="86.23",
+        okved_title="Стоматология",
+        city="Саратов",
+        region=None,
+        provider="checko_html",
+        total_found=0,
+        active_count=0,
+        inactive_count=0,
+        unknown_status_count=0,
+        with_inn_count=0,
+        with_ogrn_count=0,
+        with_phone_count=0,
+        with_email_count=0,
+        with_website_count=0,
+        with_socials_count=0,
+        with_director_count=0,
+        with_founders_count=0,
+        new_count=0,
+        duplicate_count=0,
+        weak_count=0,
+        filtered_by_region_count=0,
+        skipped_not_company_count=2,
+        invalid_candidates_count=0,
+        parser_candidates_count=0,
+        company_links_found=2,
+        debug_final_url="https://checko.ru/company/select?code=862300&page=1",
+        debug_title="Медицинская и стоматологическая практика - Организации",
+        debug_html_chars=1234,
+        debug_text_chars=456,
+        debug_snapshot_path="storage/debug/checko/checko_list_20260605_152300_862300_saratov.json",
+        debug_info={},
+        items=[],
+    )
+    rendered = _render_preview(preview)
+    assert "Поиск компаний завершён, но компаний не найдено" in rendered, "zero-result preview must have readable header"
+    assert "Final URL:" in rendered, "zero-result preview must include final URL"
+    assert "/company/ ссылок найдено: 2" in rendered, "zero-result preview must include parser link count"
+    assert "Candidate-блоков найдено: 0" in rendered, "zero-result preview must include parser candidate count"
+    assert "Парсер не нашёл карточки компаний" in rendered, "zero-result preview must explain parser-zero case"
+
+
 async def main() -> None:
     smoke_db = ROOT / "app_legal_discovery_smoke.db"
     if smoke_db.exists():
@@ -146,7 +201,9 @@ async def main() -> None:
     verify_api()
     verify_browser_error_texts()
     verify_preview_markup()
+    verify_zero_result_markup()
     await verify_preview_render()
+    verify_zero_result_render()
     print("smoke_legal_discovery ok")
 
 

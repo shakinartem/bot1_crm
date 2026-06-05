@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added Checko live debug snapshots.
+- Added parser diagnostics for Checko list pages.
+- Added fallback extraction from /company/ links.
+- Improved zero-result Telegram preview diagnostics.
 - Fixed Checko live parsing to skip category/header rows.
 - Added region post-filter for Checko results.
 - Improved active/inactive/unknown counters.

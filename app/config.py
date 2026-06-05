@@ -62,6 +62,8 @@ class Settings(BaseSettings):
     checko_html_page_delay_ms: int = Field(default=300, alias="CHECKO_HTML_PAGE_DELAY_MS")
     checko_html_timeout: int = Field(default=20, alias="CHECKO_HTML_TIMEOUT")
     checko_html_headless: bool = Field(default=True, alias="CHECKO_HTML_HEADLESS")
+    checko_html_debug: bool = Field(default=False, alias="CHECKO_HTML_DEBUG")
+    checko_html_debug_dir: Path = Field(default=Path("storage/debug/checko"), alias="CHECKO_HTML_DEBUG_DIR")
 
     @property
     def admin_id_list(self) -> list[int]:

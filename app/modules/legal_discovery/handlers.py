@@ -18,6 +18,7 @@ from app.modules.legal_discovery.keyboards import (
     discovery_niche_markup,
     discovery_preview_markup,
     discovery_provider_markup,
+    discovery_zero_result_markup,
 )
 from app.modules.legal_discovery.service import (
     get_legal_discovery_preview,
@@ -57,8 +58,8 @@ async def discovery_start(message: Message, state: FSMContext) -> None:
     await state.clear()
     await message.answer(
         "🔍 Поиск компаний\n\n"
-        "Дальше пойдём по существующему legal discovery flow:\n"
-        "источник → ОКВЭД → регион → лимит → preview → import.",
+        "Дальше идём по legal discovery flow:\n"
+        "источник -> ОКВЭД -> регион -> лимит -> preview -> import."
     )
     await message.answer("Выберите источник:", reply_markup=discovery_provider_markup())
 
@@ -127,44 +128,28 @@ async def discovery_run_preview(callback: CallbackQuery, state: FSMContext) -> N
     if not callback.message:
         return
     limit = int(callback.data.rsplit(":", 1)[-1])
-    data = await state.get_data()
-    query = data.get("discovery_query") or "стоматология"
-    city = data.get("discovery_city")
-    provider = data.get("discovery_provider")
+    await state.update_data(last_discovery_limit=limit)
     await _safe_edit_message(callback.message, "Ищу компании и собираю preview...")
-    try:
-        async with async_session_factory() as session:
-            preview = await run_legal_discovery_preview(
-                session,
-                query=query,
-                city=city,
-                region=data.get("discovery_region"),
-                limit=limit,
-                provider_code=provider,
-            )
-    except BrowserBackendError as exc:
-        await _safe_edit_message(
-            callback.message,
-            build_discovery_browser_error_text(exc),
-            reply_markup=discovery_browser_error_markup(),
-        )
-        await _safe_callback_answer(callback, "Ошибка browser backend", show_alert=True)
+    await _run_preview(callback, state, limit=limit)
+
+
+@router.callback_query(F.data == "discovery:retry:small")
+async def discovery_retry_small(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.message:
         return
-    except RuntimeError as exc:
-        await _safe_edit_message(
-            callback.message,
-            build_discovery_browser_error_text(exc),
-            reply_markup=discovery_browser_error_markup(),
-        )
-        await _safe_callback_answer(callback, "Ошибка browser backend", show_alert=True)
+    await state.update_data(last_discovery_limit=5)
+    await _safe_edit_message(callback.message, "Повторяю поиск с меньшим лимитом...")
+    await _run_preview(callback, state, limit=5)
+
+
+@router.callback_query(F.data == "discovery:retry:noreg")
+async def discovery_retry_without_region(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.message:
         return
-    await state.update_data(last_discovery_preview_id=preview.preview_id)
-    await _safe_edit_message(
-        callback.message,
-        _render_preview(preview),
-        reply_markup=discovery_preview_markup(preview_callback_token(preview.preview_id)),
-    )
-    await _safe_callback_answer(callback, "Preview готов.")
+    data = await state.get_data()
+    limit = int(data.get("last_discovery_limit") or 5)
+    await _safe_edit_message(callback.message, "Повторяю поиск без регионального фильтра...")
+    await _run_preview(callback, state, limit=limit, city=None, region=None)
 
 
 @router.callback_query(F.data.startswith("discovery:import:"))
@@ -225,9 +210,63 @@ async def discovery_cancel(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.message.answer("Поиск компаний отменён.", reply_markup=main_menu())
 
 
+async def _run_preview(
+    callback: CallbackQuery,
+    state: FSMContext,
+    *,
+    limit: int,
+    city: str | None | object = ...,
+    region: str | None | object = ...,
+) -> None:
+    if not callback.message:
+        return
+    data = await state.get_data()
+    query = data.get("discovery_query") or "стоматология"
+    provider = data.get("discovery_provider")
+    selected_city = data.get("discovery_city") if city is ... else city
+    selected_region = data.get("discovery_region") if region is ... else region
+    try:
+        async with async_session_factory() as session:
+            preview = await run_legal_discovery_preview(
+                session,
+                query=query,
+                city=selected_city,
+                region=selected_region,
+                limit=limit,
+                provider_code=provider,
+            )
+    except BrowserBackendError as exc:
+        await _safe_edit_message(
+            callback.message,
+            build_discovery_browser_error_text(exc),
+            reply_markup=discovery_browser_error_markup(),
+        )
+        await _safe_callback_answer(callback, "Ошибка browser backend", show_alert=True)
+        return
+    except RuntimeError as exc:
+        await _safe_edit_message(
+            callback.message,
+            build_discovery_browser_error_text(exc),
+            reply_markup=discovery_browser_error_markup(),
+        )
+        await _safe_callback_answer(callback, "Ошибка browser backend", show_alert=True)
+        return
+
+    await state.update_data(
+        last_discovery_preview_id=preview.preview_id,
+        last_discovery_limit=limit,
+    )
+    markup = discovery_zero_result_markup() if preview.total_found == 0 else discovery_preview_markup(preview_callback_token(preview.preview_id))
+    await _safe_edit_message(callback.message, _render_preview(preview), reply_markup=markup)
+    await _safe_callback_answer(callback, "Preview готов.")
+
+
 def _render_preview(preview) -> str:
+    if preview.total_found == 0:
+        return _render_zero_result_preview(preview)
+
     lines = [
-        "🔍 Поиск компаний завершён",
+        "Поиск компаний завершён",
         "",
         f"Найдено компаний: {preview.total_found}",
         f"Активных: {preview.active_count}",
@@ -253,6 +292,46 @@ def _render_preview(preview) -> str:
     return "\n".join(lines)
 
 
+def _render_zero_result_preview(preview) -> str:
+    region_value = preview.region or preview.city or preview.debug_info.get("requested_region") or "не указан"
+    okved_value = preview.okved_code or preview.debug_info.get("requested_okved") or "не указан"
+    lines = [
+        "Поиск компаний завершён, но компаний не найдено",
+        "",
+        f"ОКВЭД: {okved_value}",
+        f"Регион: {region_value}",
+        f"Final URL: {preview.debug_final_url or '-'}",
+        f"Title: {_trim_debug_value(preview.debug_title)}",
+        f"HTML: {preview.debug_html_chars} символов",
+        f"Текст: {preview.debug_text_chars} символов",
+        f"/company/ ссылок найдено: {preview.company_links_found}",
+        f"Candidate-блоков найдено: {preview.parser_candidates_count}",
+        f"Отброшено как не компания: {preview.skipped_not_company_count}",
+        f"Отфильтровано по региону: {preview.filtered_by_region_count}",
+    ]
+    if preview.debug_snapshot_path:
+        lines.append(f"Debug snapshot: {preview.debug_snapshot_path}")
+    if preview.parser_candidates_count == 0:
+        lines.extend(
+            [
+                "",
+                "Парсер не нашёл карточки компаний на странице Checko.",
+                "Включите CHECKO_HTML_DEBUG=true и проверьте сохранённый HTML.",
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "Что проверить:",
+            "1. Правильно ли выбран ОКВЭД.",
+            "2. Есть ли компании по этому региону на Checko.",
+            "3. Не показал ли Checko защитную или пустую страницу.",
+            "4. Для диагностики включите CHECKO_HTML_DEBUG=true.",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def build_discovery_browser_error_text(exc: Exception) -> str:
     detail = str(exc).lower()
     if "timed out" in detail or "timeout" in detail:
@@ -262,6 +341,15 @@ def build_discovery_browser_error_text(exc: Exception) -> str:
     if "parse" in detail or "разобрать" in detail:
         return DISCOVERY_BROWSER_ERROR_PARSE_TEXT
     return DISCOVERY_BROWSER_ERROR_RUNTIME_TEXT
+
+
+def _trim_debug_value(value: str | None, limit: int = 120) -> str:
+    text = (value or "").strip()
+    if not text:
+        return "-"
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1].rstrip() + "…"
 
 
 async def _safe_edit_message(message: Message, text: str, *, reply_markup=None) -> None:

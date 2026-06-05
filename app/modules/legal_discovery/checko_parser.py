@@ -5,7 +5,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 
 CHECKO_BASE_URL = "https://checko.ru"
@@ -18,7 +18,7 @@ JSON_LD_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 COMPANY_BLOCK_RE = re.compile(
-    r"""<(?:div|article|section)[^>]+class=["'][^"']*(?:company|org|card|category|breadcrumb)[^"']*["'][^>]*>(?P<body>.*?)</(?:div|article|section)>""",
+    r"""<(?:div|article|section|li)[^>]+class=["'][^"']*(?:company|org|card|category|breadcrumb|result)[^"']*["'][^>]*>(?P<body>.*?)</(?:div|article|section|li)>""",
     re.IGNORECASE | re.DOTALL,
 )
 
@@ -26,11 +26,13 @@ ORG_PREFIXES = ("ооо", "ао", "пао", "зао", "ип", "нко", "чуз"
 CATEGORY_MARKERS = (
     "деятельность в области здравоохранения",
     "медицинская и стоматологическая практика",
+    "организации 1 50",
     "организации 1-50",
     "описание категории",
     "оквэд",
     "категория",
     "раздел",
+    "вид деятельности",
 )
 COMPANY_SIGNAL_MARKERS = (
     "адрес",
@@ -97,58 +99,64 @@ class CheckoListItem:
     warnings: list[str] = field(default_factory=list)
 
 
-def parse_checko_list_page(html_text: str, base_url: str = CHECKO_BASE_URL, *, debug: dict[str, Any] | None = None) -> list[CheckoListItem]:
-    stats = debug if debug is not None else {}
-    stats.setdefault("skipped_category_like_item", 0)
-    stats.setdefault("skipped_missing_profile_url", 0)
-    stats.setdefault("skipped_missing_name", 0)
+@dataclass(slots=True)
+class CheckoParseDiagnostics:
+    company_links_found: int = 0
+    raw_candidates_found: int = 0
+    valid_items: int = 0
+    skipped_category_like: int = 0
+    skipped_missing_profile_url: int = 0
+    skipped_missing_name: int = 0
+    skipped_missing_required_company_signals: int = 0
+    sample_company_links: list[str] = field(default_factory=list)
+    sample_rejected: list[dict[str, str]] = field(default_factory=list)
 
-    items: list[CheckoListItem] = []
-    for block in _extract_candidate_blocks(html_text):
-        link_match = LINK_RE.search(block)
-        if not link_match:
-            continue
-        href = html.unescape(link_match.group("href")).strip()
-        label = _clean_text(link_match.group("label"))
-        cleaned_block = _clean_text(block)
-
-        if not _is_company_profile_href(href):
-            if _looks_like_company_candidate(label, cleaned_block):
-                stats["skipped_missing_profile_url"] += 1
-            continue
-
-        item = CheckoListItem(
-            legal_name=label or None,
-            short_name=label or None,
-            profile_url=urljoin(base_url, href),
-            address=_extract_labeled_value(cleaned_block, ["Адрес"]),
-            director_name=_extract_labeled_value(cleaned_block, ["Директор", "Генеральный директор", "Руководитель"]),
-            director_role=_extract_director_role(cleaned_block),
-            registration_date=_extract_labeled_value(cleaned_block, ["Дата регистрации"]),
-            status=_extract_status(cleaned_block),
-            raw_text=cleaned_block,
-            warnings=[],
+    def to_debug_dict(self) -> dict[str, Any]:
+        skipped_not_company = (
+            self.skipped_category_like
+            + self.skipped_missing_profile_url
+            + self.skipped_missing_name
+            + self.skipped_missing_required_company_signals
         )
-        if not item.address:
-            item.warnings.append("missing_address")
-        rejection_reason = _get_checko_company_rejection_reason(item)
-        if rejection_reason == "missing_profile_url":
-            stats["skipped_missing_profile_url"] += 1
-            continue
-        if rejection_reason == "missing_name":
-            stats["skipped_missing_name"] += 1
-            continue
-        if rejection_reason:
-            stats["skipped_category_like_item"] += 1
-            continue
-        items.append(item)
+        return {
+            "company_links_found": self.company_links_found,
+            "raw_candidates_found": self.raw_candidates_found,
+            "parsed_candidates_count": self.valid_items,
+            "parser_candidates_count": self.valid_items,
+            "valid_items": self.valid_items,
+            "skipped_category_like_item": self.skipped_category_like,
+            "skipped_missing_profile_url": self.skipped_missing_profile_url,
+            "skipped_missing_name": self.skipped_missing_name,
+            "skipped_missing_required_company_signals": self.skipped_missing_required_company_signals,
+            "skipped_not_company_count": skipped_not_company,
+            "sample_company_links": list(self.sample_company_links),
+            "sample_rejected": list(self.sample_rejected),
+        }
+
+
+def parse_checko_list_page(html_text: str, base_url: str = CHECKO_BASE_URL, *, debug: dict[str, Any] | None = None) -> list[CheckoListItem]:
+    items, diagnostics = parse_checko_list_page_with_diagnostics(html_text, base_url=base_url)
+    if debug is not None:
+        debug.update(diagnostics.to_debug_dict())
+    return items
+
+
+def parse_checko_list_page_with_diagnostics(
+    html_text: str,
+    base_url: str = CHECKO_BASE_URL,
+) -> tuple[list[CheckoListItem], CheckoParseDiagnostics]:
+    diagnostics = CheckoParseDiagnostics()
+    company_link_matches = _find_company_link_matches(html_text)
+    diagnostics.company_links_found = len(company_link_matches)
+    diagnostics.sample_company_links = [urljoin(base_url, html.unescape(match.group("href")).strip()) for match in company_link_matches[:5]]
+
+    items = _extract_items_from_blocks(_extract_candidate_blocks(html_text), base_url, diagnostics)
+    if not items and company_link_matches:
+        items = _extract_items_from_blocks(_extract_fallback_candidate_blocks(html_text, company_link_matches), base_url, diagnostics)
 
     deduped = _dedupe_list_items(items)
-    stats["parsed_candidates_count"] = len(deduped)
-    stats["skipped_not_company_count"] = (
-        stats["skipped_category_like_item"] + stats["skipped_missing_profile_url"] + stats["skipped_missing_name"]
-    )
-    return deduped
+    diagnostics.valid_items = len(deduped)
+    return deduped, diagnostics
 
 
 def is_probable_checko_company_item(item: CheckoListItem) -> bool:
@@ -298,26 +306,128 @@ def _extract_founders(text: str) -> list[CheckoFounder]:
     return results
 
 
-def _extract_nearby_block(html_text: str, start: int, end: int) -> str:
-    left = max(0, start - 500)
-    right = min(len(html_text), end + 1200)
-    return _clean_text(html_text[left:right])
+def _find_company_link_matches(html_text: str) -> list[re.Match[str]]:
+    return [match for match in LINK_RE.finditer(html_text) if "/company/" in html.unescape(match.group("href")).strip().lower()]
+
+
+def _extract_nearby_block(html_text: str, start: int, end: int, *, left_pad: int = 500, right_pad: int = 1200) -> str:
+    left = max(0, start - left_pad)
+    right = min(len(html_text), end + right_pad)
+    return html_text[left:right]
 
 
 def _extract_candidate_blocks(html_text: str) -> list[str]:
-    blocks = [match.group("body") for match in COMPANY_BLOCK_RE.finditer(html_text)]
+    blocks = [match.group(0) for match in COMPANY_BLOCK_RE.finditer(html_text)]
     if blocks:
         return blocks
-    return [_extract_nearby_block(html_text, match.start(), match.end()) for match in LINK_RE.finditer(html_text)]
+    return [_extract_nearby_block(html_text, match.start(), match.end()) for match in _find_company_link_matches(html_text)]
+
+
+def _extract_fallback_candidate_blocks(html_text: str, matches: list[re.Match[str]]) -> list[str]:
+    blocks: list[str] = []
+    for match in matches:
+        blocks.append(_extract_nearby_block(html_text, match.start(), match.end(), left_pad=350, right_pad=900))
+    return blocks
+
+
+def _extract_items_from_blocks(blocks: list[str], base_url: str, diagnostics: CheckoParseDiagnostics) -> list[CheckoListItem]:
+    items: list[CheckoListItem] = []
+    for block in blocks:
+        link_match = _select_company_link(block)
+        if not link_match:
+            continue
+        diagnostics.raw_candidates_found += 1
+        href = html.unescape(link_match.group("href")).strip()
+        label = _clean_text(link_match.group("label"))
+        cleaned_block = _clean_text(block)
+        profile_url = _normalize_company_profile_url(href, base_url)
+        item = CheckoListItem(
+            legal_name=label or None,
+            short_name=label or None,
+            profile_url=profile_url,
+            address=_extract_labeled_value(cleaned_block, ["Адрес"]),
+            director_name=_extract_labeled_value(cleaned_block, ["Директор", "Генеральный директор", "Руководитель"]),
+            director_role=_extract_director_role(cleaned_block),
+            registration_date=_extract_labeled_value(cleaned_block, ["Дата регистрации"]),
+            status=_extract_status(cleaned_block),
+            raw_text=cleaned_block,
+            warnings=[],
+        )
+        if not item.address:
+            item.warnings.append("missing_address")
+        rejection_reason = _get_checko_company_rejection_reason(item)
+        if rejection_reason:
+            _count_rejection(diagnostics, rejection_reason)
+            _append_rejected_sample(diagnostics, rejection_reason, label, href, cleaned_block)
+            continue
+        items.append(item)
+    return items
+
+
+def _select_company_link(block: str) -> re.Match[str] | None:
+    first_fallback: re.Match[str] | None = None
+    for match in LINK_RE.finditer(block):
+        href = html.unescape(match.group("href")).strip()
+        if "/company/" not in href.lower():
+            continue
+        if _is_company_profile_href(href):
+            return match
+        first_fallback = first_fallback or match
+    return first_fallback
+
+
+def _count_rejection(diagnostics: CheckoParseDiagnostics, reason: str) -> None:
+    if reason == "missing_profile_url":
+        diagnostics.skipped_missing_profile_url += 1
+    elif reason == "missing_name":
+        diagnostics.skipped_missing_name += 1
+    elif reason == "missing_required_company_signals":
+        diagnostics.skipped_missing_required_company_signals += 1
+    else:
+        diagnostics.skipped_category_like += 1
+
+
+def _append_rejected_sample(
+    diagnostics: CheckoParseDiagnostics,
+    reason: str,
+    label: str,
+    href: str,
+    cleaned_block: str,
+) -> None:
+    if len(diagnostics.sample_rejected) >= 5:
+        return
+    diagnostics.sample_rejected.append(
+        {
+            "reason": reason,
+            "name": label[:120],
+            "href": href[:200],
+            "raw_text": cleaned_block[:240],
+        }
+    )
+
+
+def _normalize_company_profile_url(href: str | None, base_url: str) -> str | None:
+    if not _is_company_profile_href(href):
+        return None
+    return urljoin(base_url, (href or "").strip())
 
 
 def _is_company_profile_href(href: str | None) -> bool:
-    normalized = (href or "").strip().lower()
-    if "/company/" not in normalized:
+    normalized = (href or "").strip()
+    if not normalized:
         return False
-    if normalized.startswith("/company/select") or "/company/select?" in normalized:
+    parsed = urlparse(normalized if "://" in normalized else urljoin(CHECKO_BASE_URL, normalized))
+    path = (parsed.path or "").lower()
+    if "/company/" not in path:
         return False
-    return not normalized.endswith("/company/")
+    if path.startswith("/company/select") or path == "/company" or path.startswith("/company/select/"):
+        return False
+    slug = path.split("/company/", 1)[-1].strip("/")
+    if not slug or slug.startswith("select"):
+        return False
+    if parsed.query:
+        return False
+    return bool(re.search(r"\d", slug))
 
 
 def _extract_canonical_url(html_text: str) -> str | None:
@@ -433,7 +543,7 @@ def _dedupe_list_items(items: list[CheckoListItem]) -> list[CheckoListItem]:
     result: list[CheckoListItem] = []
     for item in items:
         key = item.profile_url or item.legal_name or ""
-        if key in seen:
+        if not key or key in seen:
             continue
         seen.add(key)
         result.append(item)
@@ -468,7 +578,7 @@ def _get_checko_company_rejection_reason(item: CheckoListItem) -> str | None:
     if _contains_company_range_only(normalized_name) or _contains_company_range_only(normalized_raw):
         return "category_like_item"
     if not _starts_with_org_form(normalized_name) and not _has_company_signals(normalized_raw):
-        return "category_like_item"
+        return "missing_required_company_signals"
     return None
 
 
@@ -481,7 +591,7 @@ def _is_category_like_text(normalized_text: str) -> bool:
 
 
 def _contains_company_range_only(normalized_text: str) -> bool:
-    return bool(re.search(r"организации\s+\d+\s*-\s*\d+", normalized_text))
+    return bool(re.search(r"организации\s+\d+\s*[-–]\s*\d+", normalized_text))
 
 
 def _has_company_signals(normalized_text: str) -> bool:

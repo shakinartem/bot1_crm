@@ -134,6 +134,10 @@
 - Improved Checko preview counters
 - Localized Checko preview buttons
 - Hardened Checko import safety
+- Added Checko live debug snapshots
+- Added Checko parser diagnostics
+- Added fallback company link extraction
+- Added zero-result debug preview
 
 ## Bugs
 

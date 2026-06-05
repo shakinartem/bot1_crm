@@ -99,6 +99,13 @@ async def run_legal_discovery_preview(
         filtered_by_region_count=int(debug_info.get("filtered_by_region_count", 0) or 0),
         skipped_not_company_count=int(debug_info.get("skipped_not_company_count", 0) or 0),
         invalid_candidates_count=int(debug_info.get("invalid_candidates_count", 0) or 0),
+        parser_candidates_count=int(debug_info.get("parser_candidates_count", 0) or 0),
+        company_links_found=int(debug_info.get("company_links_found", 0) or 0),
+        debug_final_url=debug_info.get("final_url"),
+        debug_title=debug_info.get("title"),
+        debug_html_chars=int(debug_info.get("html_chars", 0) or 0),
+        debug_text_chars=int(debug_info.get("text_chars", 0) or 0),
+        debug_snapshot_path=debug_info.get("debug_snapshot_path"),
         debug_info=debug_info,
         items=items,
     )

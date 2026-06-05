@@ -64,3 +64,14 @@ def discovery_browser_error_markup() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="Mock / Dev", callback_data="discovery:provider:mock")],
         ]
     )
+
+
+def discovery_zero_result_markup() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Повторить с меньшим лимитом", callback_data="discovery:retry:small")],
+            [InlineKeyboardButton(text="Повторить без региона", callback_data="discovery:retry:noreg")],
+            [InlineKeyboardButton(text="Mock / Dev", callback_data="discovery:provider:mock")],
+            [InlineKeyboardButton(text="Назад", callback_data="discovery:back:provider")],
+        ]
+    )

@@ -1,14 +1,23 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import math
 import re
 from dataclasses import asdict
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
 
 from app.config import Settings, get_settings
-from app.modules.legal_discovery.checko_parser import CheckoListItem, CheckoProfileData, parse_checko_list_page, parse_checko_profile_page
+from app.modules.legal_discovery.checko_parser import (
+    CheckoListItem,
+    CheckoParseDiagnostics,
+    CheckoProfileData,
+    parse_checko_list_page_with_diagnostics,
+    parse_checko_profile_page,
+)
 from app.modules.legal_discovery.okved_catalog import normalize_okved_code, resolve_okved_by_query
 from app.modules.legal_discovery.schemas import (
     LegalDiscoveredCompany,
@@ -18,9 +27,12 @@ from app.modules.legal_discovery.schemas import (
 from app.modules.research.browser_backend import (
     BrowserBackend,
     BrowserBackendError,
-    MockBrowserBackend,
     get_browser_backend,
 )
+
+
+CAPTCHA_MARKERS = ("captcha", "капча", "проверка", "robot", "робот")
+ACCESS_DENIED_MARKERS = ("access denied", "доступ ограничен", "forbidden", "denied")
 
 
 class CheckoHtmlLegalDiscoveryProvider:
@@ -51,15 +63,30 @@ class CheckoHtmlLegalDiscoveryProvider:
         include_profiles: bool = True,
         concurrency: int | None = None,
     ) -> list[LegalDiscoveredCompany]:
+        region_query = region or city or self._settings.checko_html_region or None
         self.last_debug_info = {
             "requested_okved": None,
-            "requested_region": region or city or self._settings.checko_html_region or None,
+            "requested_region": region_query,
+            "requested_url": None,
             "final_url": None,
+            "title": None,
+            "status": None,
+            "html_chars": 0,
+            "text_chars": 0,
+            "company_links_found": 0,
+            "raw_candidates_found": 0,
             "parsed_candidates_count": 0,
+            "parser_candidates_count": 0,
             "filtered_by_region_count": 0,
             "valid_companies_count": 0,
             "invalid_candidates_count": 0,
             "skipped_not_company_count": 0,
+            "contains_organisations_text": False,
+            "contains_captcha_words": False,
+            "contains_access_denied_words": False,
+            "debug_snapshot_path": None,
+            "sample_company_links": [],
+            "sample_rejected": [],
         }
         if not self.enabled:
             return []
@@ -78,20 +105,33 @@ class CheckoHtmlLegalDiscoveryProvider:
         try:
             urls = self._build_list_urls(resolved_code, limit)
             list_items: list[CheckoListItem] = []
-            for url in urls:
+            for page_index, url in enumerate(urls, start=1):
                 page = await backend.fetch_page(url)
+                self._record_page_debug(page=page, requested_url=url)
                 self._ensure_page_success(page, stage="list", url=url)
-                parse_debug: dict[str, Any] = {}
+
                 try:
-                    parsed_items = parse_checko_list_page(page.html or "", self._settings.checko_html_base_url, debug=parse_debug)
+                    parsed_items, parse_diagnostics = parse_checko_list_page_with_diagnostics(
+                        page.html or "",
+                        self._settings.checko_html_base_url,
+                    )
                 except Exception as exc:
                     raise BrowserBackendError(
                         f"Checko parsing failed during list parse for {page.final_url or url}: {exc}",
                         status_code=503,
                     ) from exc
-                self.last_debug_info["final_url"] = page.final_url or url
-                self.last_debug_info["parsed_candidates_count"] += parse_debug.get("parsed_candidates_count", 0)
-                self.last_debug_info["skipped_not_company_count"] += parse_debug.get("skipped_not_company_count", 0)
+
+                self._record_parse_diagnostics(parse_diagnostics)
+                snapshot_path = self._save_debug_snapshot(
+                    page=page,
+                    requested_url=url,
+                    okved_code=resolved_code,
+                    region_query=region_query,
+                    page_index=page_index,
+                    diagnostics=parse_diagnostics,
+                )
+                if snapshot_path:
+                    self.last_debug_info["debug_snapshot_path"] = snapshot_path
                 list_items.extend(parsed_items)
                 await self._maybe_delay()
 
@@ -118,7 +158,6 @@ class CheckoHtmlLegalDiscoveryProvider:
                 await asyncio.gather(*(load_profile(item) for item in list_items))
 
             companies: list[LegalDiscoveredCompany] = []
-            region_query = region or city or self._settings.checko_html_region or None
             for item in list_items:
                 profile = profile_map.get(item.profile_url or "")
                 merged = self._merge_item(
@@ -181,6 +220,83 @@ class CheckoHtmlLegalDiscoveryProvider:
             f"Checko HTML browser backend failed during {stage} fetch for {url}: {detail}",
             status_code=status_code,
         )
+
+    def _record_page_debug(self, *, page, requested_url: str) -> None:
+        html_text = page.html or ""
+        body_text = page.text or ""
+        title = page.title or ""
+        combined_text = " ".join(part for part in [title, body_text, html_text[:3000]] if part)
+        self.last_debug_info.update(
+            {
+                "requested_url": requested_url,
+                "final_url": page.final_url or requested_url,
+                "title": title,
+                "status": page.status,
+                "html_chars": len(html_text),
+                "text_chars": len(body_text),
+                "contains_organisations_text": "организац" in _normalize_region_text(combined_text),
+                "contains_captcha_words": _contains_any_marker(combined_text, CAPTCHA_MARKERS),
+                "contains_access_denied_words": _contains_any_marker(combined_text, ACCESS_DENIED_MARKERS),
+            }
+        )
+
+    def _record_parse_diagnostics(self, diagnostics: CheckoParseDiagnostics) -> None:
+        debug = diagnostics.to_debug_dict()
+        self.last_debug_info["company_links_found"] += int(debug.get("company_links_found", 0) or 0)
+        self.last_debug_info["raw_candidates_found"] += int(debug.get("raw_candidates_found", 0) or 0)
+        self.last_debug_info["parsed_candidates_count"] += int(debug.get("parsed_candidates_count", 0) or 0)
+        self.last_debug_info["parser_candidates_count"] += int(debug.get("parser_candidates_count", 0) or 0)
+        self.last_debug_info["skipped_not_company_count"] += int(debug.get("skipped_not_company_count", 0) or 0)
+        if debug.get("sample_company_links") and not self.last_debug_info.get("sample_company_links"):
+            self.last_debug_info["sample_company_links"] = list(debug["sample_company_links"])
+        if debug.get("sample_rejected") and not self.last_debug_info.get("sample_rejected"):
+            self.last_debug_info["sample_rejected"] = list(debug["sample_rejected"])
+
+    def _save_debug_snapshot(
+        self,
+        *,
+        page,
+        requested_url: str,
+        okved_code: str,
+        region_query: str | None,
+        page_index: int,
+        diagnostics: CheckoParseDiagnostics,
+    ) -> str | None:
+        if not self._settings.checko_html_debug:
+            return None
+        debug_dir = self._settings.checko_html_debug_dir
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        region_slug = _slugify_region(region_query)
+        page_suffix = f"_p{page_index}" if page_index > 1 else ""
+        stem = f"checko_list_{timestamp}_{okved_code}_{region_slug}{page_suffix}"
+        html_path = debug_dir / f"{stem}.html"
+        text_path = debug_dir / f"{stem}.txt"
+        meta_path = debug_dir / f"{stem}.json"
+        html_path.write_text(page.html or "", encoding="utf-8")
+        text_path.write_text(page.text or "", encoding="utf-8")
+        metadata = {
+            "requested_url": requested_url,
+            "final_url": page.final_url or requested_url,
+            "title": page.title or "",
+            "status": page.status,
+            "html_chars": len(page.html or ""),
+            "text_chars": len(page.text or ""),
+            "okved_code": okved_code,
+            "region_query": region_query,
+            "contains_company_links": diagnostics.company_links_found,
+            "contains_organisations_text": self.last_debug_info.get("contains_organisations_text", False),
+            "contains_captcha_words": self.last_debug_info.get("contains_captcha_words", False),
+            "contains_access_denied_words": self.last_debug_info.get("contains_access_denied_words", False),
+            "parser_candidates_count": diagnostics.valid_items,
+            "valid_companies_count": self.last_debug_info.get("valid_companies_count", 0),
+            "skipped_not_company": diagnostics.to_debug_dict()["skipped_not_company_count"],
+            "filtered_by_region": self.last_debug_info.get("filtered_by_region_count", 0),
+            "sample_company_links": diagnostics.sample_company_links,
+            "sample_rejected": diagnostics.sample_rejected,
+        }
+        meta_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+        return str(meta_path)
 
     def _merge_item(
         self,
@@ -316,7 +432,7 @@ def _build_region_variants(normalized_query: str) -> set[str]:
             continue
         variants.add(token)
         if token.endswith("ская"):
-            variants.add(token[:-5])
+            variants.add(token[:-4])
         elif token.endswith("ский"):
             variants.add(token[:-4])
     return {item.strip() for item in variants if item.strip()}
@@ -337,3 +453,14 @@ def _extract_region_from_address(address: str | None) -> str | None:
     if match:
         return match.group(1).strip()
     return None
+
+
+def _contains_any_marker(text: str, markers: tuple[str, ...]) -> bool:
+    normalized = _normalize_region_text(text)
+    return any(_normalize_region_text(marker) in normalized for marker in markers)
+
+
+def _slugify_region(region_query: str | None) -> str:
+    normalized = _normalize_region_text(region_query or "all")
+    slug = re.sub(r"[^a-zа-я0-9]+", "_", normalized, flags=re.IGNORECASE)
+    return slug.strip("_") or "all"

@@ -107,7 +107,12 @@ class CamoufoxBrowserBackend(BrowserBackend):
                 html = await page.content()
                 body_locator = page.locator("body")
                 text_timeout_ms = min(timeout_ms, 5_000)
-                text = await body_locator.inner_text(timeout=text_timeout_ms)
+                text = ""
+                warnings: list[str] = []
+                try:
+                    text = await body_locator.inner_text(timeout=text_timeout_ms)
+                except Exception:
+                    warnings.append("body_text_unavailable")
                 return BrowserPageResult(
                     url=url,
                     status="success",
@@ -116,6 +121,7 @@ class CamoufoxBrowserBackend(BrowserBackend):
                     text=text,
                     title=title,
                     http_status=200,
+                    warnings=warnings,
                 )
         except Exception as exc:  # pragma: no cover - depends on optional package/runtime
             message = str(exc) or exc.__class__.__name__

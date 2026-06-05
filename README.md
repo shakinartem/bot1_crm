@@ -111,6 +111,22 @@ Recommended defaults:
 - Category-like rows, headers, breadcrumbs, and `Организации 1-50` blocks are skipped before preview.
 - Unknown company status is tracked separately and is not counted as inactive.
 
+## Checko Live Debugging
+
+- Enable `CHECKO_HTML_DEBUG=true` to save live list-page diagnostics.
+- The default snapshot directory is `CHECKO_HTML_DEBUG_DIR=storage/debug/checko`.
+- Each debug run writes `.html`, `.txt`, and `.json` files for the fetched Checko list page.
+- The metadata JSON includes requested URL, final URL, title, HTML/text sizes, `/company/` link counts, parser candidate counts, and captcha/access markers.
+
+If live preview returns `0` results:
+
+- Check `final_url` to confirm Checko opened the expected list page.
+- Check `title` and saved HTML to see whether Checko returned a category page, blank page, or protective page.
+- Check how many `/company/` links and parser candidates were detected.
+- Try the same OKVED without region to see whether the region post-filter excludes everything.
+- Reduce the preview limit and keep `CHECKO_HTML_MAX_PAGES=1`.
+- Recheck Camoufox if HTML/text size looks unexpectedly small.
+
 Offline verification commands:
 
 ```bash

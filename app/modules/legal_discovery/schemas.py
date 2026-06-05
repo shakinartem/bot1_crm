@@ -97,6 +97,13 @@ class LegalDiscoveryPreview(BaseModel):
     filtered_by_region_count: int = 0
     skipped_not_company_count: int = 0
     invalid_candidates_count: int = 0
+    parser_candidates_count: int = 0
+    company_links_found: int = 0
+    debug_final_url: str | None = None
+    debug_title: str | None = None
+    debug_html_chars: int = 0
+    debug_text_chars: int = 0
+    debug_snapshot_path: str | None = None
     debug_info: dict[str, Any] = Field(default_factory=dict)
     items: list[LegalDiscoveryPreviewItem] = Field(default_factory=list)
 
