@@ -20,6 +20,10 @@
 
 ## Done
 
+- Fixed Checko validation for candidates without INN on list page.
+- Added real Checko profile URL validation.
+- Added Checko region UI filtering diagnostics.
+- Improved Checko profile enrichment flow.
 - CRMUser model
 - User roles foundation
 - Telegram user auto-create

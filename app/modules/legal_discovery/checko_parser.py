@@ -163,6 +163,19 @@ def is_probable_checko_company_item(item: CheckoListItem) -> bool:
     return _get_checko_company_rejection_reason(item) is None
 
 
+def is_real_checko_profile_url(url: str | None) -> bool:
+    normalized = (url or "").strip()
+    if not normalized:
+        return False
+    parsed = urlparse(normalized if "://" in normalized else urljoin(CHECKO_BASE_URL, normalized))
+    path = (parsed.path or "").strip().lower()
+    if parsed.query or parsed.fragment:
+        return False
+    if path in {"/company", "/company/"}:
+        return False
+    return bool(re.fullmatch(r"/company/[a-z0-9][a-z0-9-]*-\d{13,15}/?", path))
+
+
 def parse_checko_profile_page(html_text: str, base_url: str = CHECKO_BASE_URL) -> CheckoProfileData:
     lines = _html_to_lines(html_text)
     text = "\n".join(lines)
@@ -207,6 +220,10 @@ def parse_checko_profile_page(html_text: str, base_url: str = CHECKO_BASE_URL) -
 
     if not profile.inn or not profile.ogrn or not profile.kpp or not profile.okpo:
         _apply_jsonld_fallback(profile, html_text)
+    if not profile.ogrn and profile.checko_profile_url:
+        match = re.search(r"-(\d{13,15})/?$", profile.checko_profile_url)
+        if match:
+            profile.ogrn = match.group(1)
     if not profile.inn:
         profile.warnings.append("missing_inn")
     if not profile.ogrn:
@@ -413,21 +430,7 @@ def _normalize_company_profile_url(href: str | None, base_url: str) -> str | Non
 
 
 def _is_company_profile_href(href: str | None) -> bool:
-    normalized = (href or "").strip()
-    if not normalized:
-        return False
-    parsed = urlparse(normalized if "://" in normalized else urljoin(CHECKO_BASE_URL, normalized))
-    path = (parsed.path or "").lower()
-    if "/company/" not in path:
-        return False
-    if path.startswith("/company/select") or path == "/company" or path.startswith("/company/select/"):
-        return False
-    slug = path.split("/company/", 1)[-1].strip("/")
-    if not slug or slug.startswith("select"):
-        return False
-    if parsed.query:
-        return False
-    return bool(re.search(r"\d", slug))
+    return is_real_checko_profile_url(href)
 
 
 def _extract_canonical_url(html_text: str) -> str | None:
@@ -567,7 +570,7 @@ def _looks_like_company_candidate(label: str | None, raw_text: str | None) -> bo
 def _get_checko_company_rejection_reason(item: CheckoListItem) -> str | None:
     if not item.profile_url:
         return "missing_profile_url"
-    if not _is_company_profile_href(item.profile_url):
+    if not is_real_checko_profile_url(item.profile_url):
         return "category_like_item"
     normalized_name = _normalize_checko_text(item.legal_name)
     normalized_raw = _normalize_checko_text(item.raw_text)
@@ -577,7 +580,7 @@ def _get_checko_company_rejection_reason(item: CheckoListItem) -> str | None:
         return "category_like_item"
     if _contains_company_range_only(normalized_name) or _contains_company_range_only(normalized_raw):
         return "category_like_item"
-    if not _starts_with_org_form(normalized_name) and not _has_company_signals(normalized_raw):
+    if not normalized_raw:
         return "missing_required_company_signals"
     return None
 

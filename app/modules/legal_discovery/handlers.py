@@ -279,14 +279,19 @@ def _render_preview(preview) -> str:
         f"С сайтами: {preview.with_website_count}",
         f"С телефонами: {preview.with_phone_count}",
         f"Слабые данные: {preview.weak_count}",
+        f"Parser candidates: {preview.parser_candidates_count}",
+        f"До region post-filter: {preview.candidates_before_region}",
+        f"Profile fetch ok: {preview.profile_fetch_success}",
+        f"Profile fetch failed: {preview.profile_fetch_failed}",
         f"Отфильтровано по региону: {preview.filtered_by_region_count}",
         f"Отброшено как не компания: {preview.skipped_not_company_count}",
         "",
         "Первые результаты:",
     ]
     for index, item in enumerate(preview.items[:5], start=1):
+        inn_value = item.company.inn or ("будет получен из профиля" if item.company.checko_profile_url else "не получен")
         lines.append(
-            f"{index}. {item.company.legal_name} — ИНН {item.company.inn or '-'} — "
+            f"{index}. {item.company.legal_name} — ИНН {inn_value} — "
             f"{item.company.status or 'unknown'} — {item.company.city or item.company.region or 'регион не указан'}"
         )
     return "\n".join(lines)
@@ -306,11 +311,22 @@ def _render_zero_result_preview(preview) -> str:
         f"Текст: {preview.debug_text_chars} символов",
         f"/company/ ссылок найдено: {preview.company_links_found}",
         f"Candidate-блоков найдено: {preview.parser_candidates_count}",
+        f"До region post-filter: {preview.candidates_before_region}",
+        f"Profile fetch ok: {preview.profile_fetch_success}",
+        f"Profile fetch failed: {preview.profile_fetch_failed}",
         f"Отброшено как не компания: {preview.skipped_not_company_count}",
         f"Отфильтровано по региону: {preview.filtered_by_region_count}",
     ]
     if preview.debug_snapshot_path:
         lines.append(f"Debug snapshot: {preview.debug_snapshot_path}")
+    if preview.debug_info.get("before_region_html_path"):
+        lines.append(f"Before region HTML: {preview.debug_info['before_region_html_path']}")
+    if preview.debug_info.get("after_region_html_path"):
+        lines.append(f"After region HTML: {preview.debug_info['after_region_html_path']}")
+    if "region_filter_applied" in preview.debug_info:
+        lines.append(f"Region UI applied: {preview.debug_info.get('region_filter_applied')}")
+    if preview.debug_info.get("region_filter_error"):
+        lines.append(f"Region UI error: {preview.debug_info['region_filter_error']}")
     if preview.parser_candidates_count == 0:
         lines.extend(
             [

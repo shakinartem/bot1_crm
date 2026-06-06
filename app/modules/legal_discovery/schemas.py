@@ -94,6 +94,9 @@ class LegalDiscoveryPreview(BaseModel):
     new_count: int
     duplicate_count: int
     weak_count: int
+    candidates_before_region: int = 0
+    profile_fetch_success: int = 0
+    profile_fetch_failed: int = 0
     filtered_by_region_count: int = 0
     skipped_not_company_count: int = 0
     invalid_candidates_count: int = 0

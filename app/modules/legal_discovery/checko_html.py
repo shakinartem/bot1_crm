@@ -77,14 +77,26 @@ class CheckoHtmlLegalDiscoveryProvider:
             "raw_candidates_found": 0,
             "parsed_candidates_count": 0,
             "parser_candidates_count": 0,
+            "candidates_before_region": 0,
+            "profile_fetch_success": 0,
+            "profile_fetch_failed": 0,
             "filtered_by_region_count": 0,
             "valid_companies_count": 0,
             "invalid_candidates_count": 0,
             "skipped_not_company_count": 0,
+            "weak_data_count": 0,
             "contains_organisations_text": False,
             "contains_captcha_words": False,
             "contains_access_denied_words": False,
             "debug_snapshot_path": None,
+            "before_region_html_path": None,
+            "after_region_html_path": None,
+            "region_modal_opened": False,
+            "region_search_filled": False,
+            "region_option_clicked": None,
+            "region_apply_clicked": False,
+            "region_filter_applied": False,
+            "region_filter_error": None,
             "sample_company_links": [],
             "sample_rejected": [],
         }
@@ -106,7 +118,7 @@ class CheckoHtmlLegalDiscoveryProvider:
             urls = self._build_list_urls(resolved_code, limit)
             list_items: list[CheckoListItem] = []
             for page_index, url in enumerate(urls, start=1):
-                page = await backend.fetch_page(url)
+                page = await backend.fetch_checko_list_page(url, region_query=region_query)
                 self._record_page_debug(page=page, requested_url=url)
                 self._ensure_page_success(page, stage="list", url=url)
 
@@ -136,6 +148,7 @@ class CheckoHtmlLegalDiscoveryProvider:
                 await self._maybe_delay()
 
             profile_map: dict[str, CheckoProfileData] = {}
+            profile_failed_urls: set[str] = set()
             if include_profiles and self._settings.checko_html_profile_enabled:
                 effective_concurrency = self._resolve_concurrency(concurrency)
                 semaphore = asyncio.Semaphore(effective_concurrency)
@@ -145,14 +158,19 @@ class CheckoHtmlLegalDiscoveryProvider:
                         return
                     async with semaphore:
                         page = await backend.fetch_page(item.profile_url)
-                        self._ensure_page_success(page, stage="profile", url=item.profile_url)
+                        if page.status != "success":
+                            profile_failed_urls.add(item.profile_url)
+                            item.warnings.append("profile_fetch_failed")
+                            self.last_debug_info["profile_fetch_failed"] += 1
+                            return
                         try:
                             profile_map[item.profile_url] = parse_checko_profile_page(page.html or "", self._settings.checko_html_base_url)
                         except Exception as exc:
-                            raise BrowserBackendError(
-                                f"Checko parsing failed during profile parse for {page.final_url or item.profile_url}: {exc}",
-                                status_code=503,
-                            ) from exc
+                            profile_failed_urls.add(item.profile_url)
+                            item.warnings.append("profile_parse_failed")
+                            self.last_debug_info["profile_fetch_failed"] += 1
+                            return
+                        self.last_debug_info["profile_fetch_success"] += 1
                         await self._maybe_delay()
 
                 await asyncio.gather(*(load_profile(item) for item in list_items))
@@ -171,10 +189,17 @@ class CheckoHtmlLegalDiscoveryProvider:
                 if validation == "invalid":
                     self.last_debug_info["invalid_candidates_count"] += 1
                     continue
+                self.last_debug_info["candidates_before_region"] += 1
                 if validation == "weak":
                     merged.confidence = "low"
+                    self.last_debug_info["weak_data_count"] += 1
                     if "missing_requisites" not in merged.warnings:
                         merged.warnings.append("missing_requisites")
+                if item.profile_url in profile_failed_urls:
+                    merged.status = None
+                    merged.confidence = "low"
+                    if "profile_fetch_failed" not in merged.warnings:
+                        merged.warnings.append("profile_fetch_failed")
                 if region_query and not matches_region_filter(merged, region_query):
                     self.last_debug_info["filtered_by_region_count"] += 1
                     continue
@@ -239,6 +264,16 @@ class CheckoHtmlLegalDiscoveryProvider:
                 "contains_access_denied_words": _contains_any_marker(combined_text, ACCESS_DENIED_MARKERS),
             }
         )
+        for key in (
+            "region_modal_opened",
+            "region_search_filled",
+            "region_option_clicked",
+            "region_apply_clicked",
+            "region_filter_applied",
+            "region_filter_error",
+        ):
+            if key in getattr(page, "debug_data", {}):
+                self.last_debug_info[key] = page.debug_data.get(key)
 
     def _record_parse_diagnostics(self, diagnostics: CheckoParseDiagnostics) -> None:
         debug = diagnostics.to_debug_dict()
@@ -275,6 +310,20 @@ class CheckoHtmlLegalDiscoveryProvider:
         meta_path = debug_dir / f"{stem}.json"
         html_path.write_text(page.html or "", encoding="utf-8")
         text_path.write_text(page.text or "", encoding="utf-8")
+        before_region_html_path = None
+        after_region_html_path = None
+        before_region_html = getattr(page, "debug_data", {}).get("before_region_html")
+        after_region_html = getattr(page, "debug_data", {}).get("after_region_html")
+        if before_region_html is not None:
+            before_path = debug_dir / f"{stem}_before_region.html"
+            before_path.write_text(before_region_html, encoding="utf-8")
+            before_region_html_path = str(before_path)
+            self.last_debug_info["before_region_html_path"] = before_region_html_path
+        if after_region_html is not None:
+            after_path = debug_dir / f"{stem}_after_region.html"
+            after_path.write_text(after_region_html, encoding="utf-8")
+            after_region_html_path = str(after_path)
+            self.last_debug_info["after_region_html_path"] = after_region_html_path
         metadata = {
             "requested_url": requested_url,
             "final_url": page.final_url or requested_url,
@@ -289,9 +338,21 @@ class CheckoHtmlLegalDiscoveryProvider:
             "contains_captcha_words": self.last_debug_info.get("contains_captcha_words", False),
             "contains_access_denied_words": self.last_debug_info.get("contains_access_denied_words", False),
             "parser_candidates_count": diagnostics.valid_items,
+            "candidates_before_region": self.last_debug_info.get("candidates_before_region", 0),
+            "profile_fetch_success": self.last_debug_info.get("profile_fetch_success", 0),
+            "profile_fetch_failed": self.last_debug_info.get("profile_fetch_failed", 0),
             "valid_companies_count": self.last_debug_info.get("valid_companies_count", 0),
             "skipped_not_company": diagnostics.to_debug_dict()["skipped_not_company_count"],
             "filtered_by_region": self.last_debug_info.get("filtered_by_region_count", 0),
+            "weak_data": self.last_debug_info.get("weak_data_count", 0),
+            "region_modal_opened": self.last_debug_info.get("region_modal_opened", False),
+            "region_search_filled": self.last_debug_info.get("region_search_filled", False),
+            "region_option_clicked": self.last_debug_info.get("region_option_clicked"),
+            "region_apply_clicked": self.last_debug_info.get("region_apply_clicked", False),
+            "region_filter_applied": self.last_debug_info.get("region_filter_applied", False),
+            "region_filter_error": self.last_debug_info.get("region_filter_error"),
+            "before_region_html_path": before_region_html_path,
+            "after_region_html_path": after_region_html_path,
             "sample_company_links": diagnostics.sample_company_links,
             "sample_rejected": diagnostics.sample_rejected,
         }
@@ -372,18 +433,18 @@ class CheckoHtmlLegalDiscoveryProvider:
         )
 
     def _validate_candidate(self, item: CheckoListItem, profile: CheckoProfileData | None, *, include_profiles: bool) -> str:
-        if not include_profiles:
-            return "valid" if item.profile_url else "invalid"
-        if not item.profile_url:
+        has_list_level_core = bool(item.profile_url and item.legal_name and (item.raw_text or item.address))
+        if not has_list_level_core:
             return "invalid"
+        if not include_profiles:
+            return "valid"
         if not profile:
-            return "weak" if item.legal_name and item.address else "invalid"
+            return "weak"
         legal_name = profile.legal_name or item.legal_name
         short_name = profile.short_name or item.short_name or legal_name
-        has_core = bool(profile.inn and profile.ogrn and legal_name and short_name)
-        if has_core:
+        if (profile.inn or profile.ogrn) and legal_name and short_name:
             return "valid"
-        if legal_name and short_name and item.profile_url and (profile.legal_address or item.address):
+        if legal_name and short_name and item.profile_url and (profile.legal_address or item.address or item.raw_text):
             return "weak"
         return "invalid"
 
@@ -411,7 +472,7 @@ def matches_region_filter(company: LegalDiscoveredCompany, region_query: str | N
         company.region,
         company.text_excerpt,
         (company.raw_payload or {}).get("list", {}).get("raw_text") if company.raw_payload else None,
-        (company.raw_payload or {}).get("profile", {}).get("legal_address") if company.raw_payload else None,
+        ((company.raw_payload or {}).get("profile") or {}).get("legal_address") if company.raw_payload else None,
     ]
     haystack = " ".join(_normalize_region_text(part) for part in haystack_parts if part)
     return any(variant and variant in haystack for variant in variants)
@@ -420,7 +481,11 @@ def matches_region_filter(company: LegalDiscoveredCompany, region_query: str | N
 def _normalize_region_text(value: str | None) -> str:
     text = (value or "").lower().replace("ё", "е")
     text = re.sub(r"[^\w\s-]+", " ", text, flags=re.UNICODE)
-    text = re.sub(r"\b(г|город|область|обл|республика|р-н|район)\b", " ", text)
+    text = re.sub(
+        r"\b(\u0433|\u0433\u043e\u0440\u043e\u0434|\u043e\u0431\u043b\u0430\u0441\u0442\u044c|\u043e\u0431\u043b|\u0440\u0435\u0441\u043f\u0443\u0431\u043b\u0438\u043a\u0430|\u0440-\u043d|\u0440\u0430\u0439\u043e\u043d)\b",
+        " ",
+        text,
+    )
     text = re.sub(r"\s+", " ", text)
     return text.strip()
 
@@ -440,7 +505,10 @@ def _build_region_variants(normalized_query: str) -> set[str]:
 
 def _extract_city_from_address(address: str | None) -> str | None:
     text = address or ""
-    for pattern in (r"\bг\.\s*([А-ЯA-ZЁ][^,]+)", r"\bгород\s+([А-ЯA-ZЁ][^,]+)"):
+    for pattern in (
+        r"\bг\.\s*([А-ЯA-ZЁ][^,]+)",
+        r"\bгород\s+([А-ЯA-ZЁ][^,]+)",
+    ):
         match = re.search(pattern, text, re.IGNORECASE)
         if match:
             return match.group(1).strip()

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Fixed Checko validation for candidates without INN on list page.
+- Added real Checko profile URL validation.
+- Added Checko region UI filtering.
+- Improved Checko profile enrichment flow.
 - Added Checko live debug snapshots.
 - Added parser diagnostics for Checko list pages.
 - Added fallback extraction from /company/ links.

@@ -107,7 +107,8 @@ Recommended defaults:
 ### Live Checko validation
 
 - Start with `limit=5-10`, `CHECKO_HTML_MAX_PAGES=1`, and `CHECKO_HTML_CONCURRENCY=3`.
-- The region filter is validated again after parsing, so off-region cards are excluded even if Checko shows them.
+- Checko list pages do not reliably expose `???` / `????`; requisites are enriched from the company profile page.
+- The region filter is applied through the Checko UI modal first and then validated again after parsing, so off-region cards are excluded even if Checko shows them.
 - Category-like rows, headers, breadcrumbs, and `Организации 1-50` blocks are skipped before preview.
 - Unknown company status is tracked separately and is not counted as inactive.
 
@@ -116,7 +117,8 @@ Recommended defaults:
 - Enable `CHECKO_HTML_DEBUG=true` to save live list-page diagnostics.
 - The default snapshot directory is `CHECKO_HTML_DEBUG_DIR=storage/debug/checko`.
 - Each debug run writes `.html`, `.txt`, and `.json` files for the fetched Checko list page.
-- The metadata JSON includes requested URL, final URL, title, HTML/text sizes, `/company/` link counts, parser candidate counts, and captcha/access markers.
+- The metadata JSON includes requested URL, final URL, title, HTML/text sizes, `/company/` link counts, parser candidate counts, profile-fetch counters, region-UI diagnostics, and captcha/access markers.
+- Compare `parser_candidates_count` vs `valid_companies_count` when debugging list/profile validation gaps.
 
 If live preview returns `0` results:
 
