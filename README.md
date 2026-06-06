@@ -49,6 +49,7 @@ Optional browser-backed discovery:
 - `BROWSER_BACKEND=camoufox`
 - `CAMOUFOX_HEADLESS=true`
 - `CAMOUFOX_TIMEOUT=20`
+- `CHECKO_HTML_HEADLESS=true`
 
 Live Checko HTML setup:
 
@@ -56,6 +57,11 @@ Live Checko HTML setup:
 - `python -m camoufox fetch`
 - `BROWSER_BACKEND=camoufox`
 - `CHECKO_HTML_ENABLED=true`
+- `CHECKO_HTML_HEADLESS=true`
+- `CAMOUFOX_HEADLESS=true`
+
+If you want to watch the browser visually during debugging:
+
 - `CHECKO_HTML_HEADLESS=false`
 - `CAMOUFOX_HEADLESS=false`
 
@@ -96,6 +102,7 @@ The current legal discovery flow is OKVED-first and supports:
 - Telegram preview length safety with compact rendering capped to 3500 chars
 - contact/director mapping into CRM
 - optional research queue launch after import
+- CRM-side grouping by saved city and region after import
 
 Recommended defaults:
 
@@ -107,9 +114,9 @@ Recommended defaults:
 
 ### Live Checko validation
 
-- The Checko region tree flow is: open `Все регионы` -> wait for `Регионы и города` -> expand the federal district -> click the region checkbox -> `Готово` -> `Применить`.
-- For Saratov the target path is `Приволжский федеральный округ -> 64 Саратовская область`.
-- If the numbered region row is not found, the flow falls back to `Быстрый поиск` and selects the first matching checkbox row.
+- The Telegram flow is now `ОКВЭД -> limit -> preview -> import`.
+- Checko discovery no longer applies region in the Checko UI.
+- Region and city sorting now happens inside CRM after import, using saved company addresses.
 - Telegram preview never sends full HTML/debug JSON; complete diagnostics stay only in `storage/debug/checko/*.json`, `storage/debug/checko/*.html`, `storage/debug/checko/*.txt`, and preview CSV export.
 
 - Start with `limit=5-10`, `CHECKO_HTML_MAX_PAGES=1`, and `CHECKO_HTML_CONCURRENCY=3`.
@@ -131,7 +138,6 @@ If live preview returns `0` results:
 - Check `final_url` to confirm Checko opened the expected list page.
 - Check `title` and saved HTML to see whether Checko returned a category page, blank page, or protective page.
 - Check how many `/company/` links and parser candidates were detected.
-- Try the same OKVED without region to see whether the region post-filter excludes everything.
 - Reduce the preview limit and keep `CHECKO_HTML_MAX_PAGES=1`.
 - Recheck Camoufox if HTML/text size looks unexpectedly small.
 
@@ -197,6 +203,13 @@ CRM:
 - `priority`
 - `limit`
 - `offset`
+
+Telegram CRM also includes:
+
+- `🗺 Города и регионы`
+- `🏙 Компании по городу`
+
+These screens work on saved CRM companies after import and use normalized `city` / `region` values derived from company addresses.
 
 Example:
 
@@ -378,7 +391,7 @@ The Telegram main menu is now grouped for daily manager work:
 Notes:
 
 - `🔍 Поиск компаний` is the direct entrypoint into the existing legal discovery flow
-- the flow remains `источник -> ОКВЭД -> регион -> лимит -> preview -> import`
+- the flow remains `источник -> ОКВЭД -> лимит -> preview -> import`
 - if a section is prepared but not fully implemented yet, the bot shows a placeholder instead of failing
 
 Status mapping for Bot 2 handoff:

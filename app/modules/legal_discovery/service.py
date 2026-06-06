@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.modules.crm.constants import CompanyStatus, InteractionType, LeadPriority
+from app.modules.crm.location_utils import extract_region_city_from_address
 from app.modules.crm.models import Company, ContactPoint, DecisionMaker, LeadInteraction
 from app.modules.enrichment.schemas import dump_json_text
 from app.modules.intelligence.models import IntelligenceSnapshot
@@ -152,14 +153,15 @@ async def import_legal_discovery_preview(
             continue
 
         try:
+            normalized_location = extract_region_city_from_address(item.company.address or "")
             company = Company(
                 name=item.company.short_name or item.company.legal_name or "Unknown company",
                 legal_name=item.company.legal_name,
                 inn=item.company.inn,
                 ogrn=item.company.ogrn,
                 address=item.company.address,
-                city=item.company.city,
-                region=item.company.region,
+                city=item.company.city or normalized_location["city"],
+                region=item.company.region or normalized_location["region"],
                 source=f"legal_discovery:{preview.provider}",
                 status=CompanyStatus.RESEARCH_NEEDED.value,
                 priority=_compute_priority(item.company),

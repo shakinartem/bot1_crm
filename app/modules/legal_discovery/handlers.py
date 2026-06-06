@@ -33,6 +33,7 @@ router = Router(name="legal_discovery")
 TELEGRAM_PREVIEW_LIMIT = 3500
 PREVIEW_RESULT_LIMIT = 5
 MESSAGE_TOO_LONG_FALLBACK_TEXT = "Preview слишком большой. Сократил вывод. Проверьте debug/CSV."
+MESSAGE_TOO_LONG_HARD_FALLBACK_TEXT = "Preview слишком большой. Показал краткую версию, полный debug в storage/debug/checko."
 TRUNCATED_RESULTS_NOTICE = "Показаны первые 5 результатов. Полная диагностика сохранена в debug/CSV."
 
 DISCOVERY_BROWSER_ERROR_INSTALL_TEXT = (
@@ -48,13 +49,12 @@ DISCOVERY_BROWSER_ERROR_RUNTIME_TEXT = (
     "Camoufox запустился, но не смог загрузить страницу. Попробуйте CAMOUFOX_HEADLESS=true и повторите попытку."
 )
 DISCOVERY_BROWSER_ERROR_PARSE_TEXT = (
-    "Не удалось корректно разобрать выдачу Checko. Попробуйте меньший лимит, другой регион или Mock / Dev."
+    "Не удалось корректно разобрать выдачу Checko. Попробуйте меньший лимит или Mock / Dev."
 )
 
 
 class DiscoveryStates(StatesGroup):
     niche_manual = State()
-    city = State()
 
 
 @router.message(F.text == "🔌 Поиск компаний")
@@ -64,7 +64,7 @@ async def discovery_start(message: Message, state: FSMContext) -> None:
     await message.answer(
         "🔌 Поиск компаний\n\n"
         "Дальше идём по legal discovery flow:\n"
-        "источник -> ОКВЭД -> регион -> лимит -> preview -> import."
+        "источник -> ОКВЭД -> лимит -> preview -> import."
     )
     await message.answer("Выберите источник:", reply_markup=discovery_provider_markup())
 
@@ -99,8 +99,9 @@ async def discovery_pick_niche(callback: CallbackQuery, state: FSMContext) -> No
         await _safe_callback_answer(callback)
         return
     await state.update_data(discovery_query=niche)
-    await state.set_state(DiscoveryStates.city)
-    await callback.message.answer("Введите город или регион одним сообщением.", reply_markup=flow_menu())
+    await state.set_state(None)
+    await callback.message.answer("Выберите лимит выдачи.")
+    await callback.message.answer("Лимит:", reply_markup=discovery_limit_markup())
     await _safe_callback_answer(callback)
 
 
@@ -111,18 +112,6 @@ async def discovery_niche_manual(message: Message, state: FSMContext) -> None:
         await message.answer("Поиск компаний отменён.", reply_markup=main_menu())
         return
     await state.update_data(discovery_query=(message.text or "").strip())
-    await state.set_state(DiscoveryStates.city)
-    await message.answer("Введите город или регион одним сообщением.", reply_markup=flow_menu())
-
-
-@router.message(DiscoveryStates.city)
-async def discovery_city_input(message: Message, state: FSMContext) -> None:
-    if (message.text or "").strip() == CANCEL_TEXT:
-        await state.clear()
-        await message.answer("Поиск компаний отменён.", reply_markup=main_menu())
-        return
-    raw = (message.text or "").strip()
-    await state.update_data(discovery_city=raw, discovery_region=None)
     await state.set_state(None)
     await message.answer("Выберите лимит выдачи.")
     await message.answer("Лимит:", reply_markup=discovery_limit_markup())
@@ -145,16 +134,6 @@ async def discovery_retry_small(callback: CallbackQuery, state: FSMContext) -> N
     await state.update_data(last_discovery_limit=5)
     await _safe_edit_message(callback.message, "Повторяю поиск с меньшим лимитом...")
     await _run_preview(callback, state, limit=5)
-
-
-@router.callback_query(F.data == "discovery:retry:noreg")
-async def discovery_retry_without_region(callback: CallbackQuery, state: FSMContext) -> None:
-    if not callback.message:
-        return
-    data = await state.get_data()
-    limit = int(data.get("last_discovery_limit") or 5)
-    await _safe_edit_message(callback.message, "Повторяю поиск без регионального фильтра...")
-    await _run_preview(callback, state, limit=limit, city=None, region=None)
 
 
 @router.callback_query(F.data.startswith("discovery:import:"))
@@ -228,8 +207,8 @@ async def _run_preview(
     data = await state.get_data()
     query = data.get("discovery_query") or "стоматология"
     provider = data.get("discovery_provider")
-    selected_city = data.get("discovery_city") if city is ... else city
-    selected_region = data.get("discovery_region") if region is ... else region
+    selected_city = None if city is ... else city
+    selected_region = None if region is ... else region
     try:
         async with async_session_factory() as session:
             preview = await run_legal_discovery_preview(
@@ -289,15 +268,13 @@ def _render_preview(preview, compact: bool = True) -> str:
     if preview.total_found == 0:
         return truncate_telegram_text(_render_zero_result_preview(preview, compact=compact))
 
-    region_value = preview.region or preview.city or preview.debug_info.get("requested_region") or "не указан"
     okved_value = preview.okved_code or preview.debug_info.get("requested_okved") or "не указан"
     lines = [
         "Поиск компаний завершён",
         "",
         f"ОКВЭД: {okved_value}",
-        f"Регион: {region_value}",
+        "Регион: не используется в Checko, сортировка после импорта",
         f"Final URL: {truncate_telegram_text(preview.debug_final_url or '-', limit=160)}",
-        f"Title: {_trim_debug_value(preview.debug_title)}",
         f"Найдено компаний: {preview.total_found}",
         f"Активных: {preview.active_count}",
         f"Неактивных: {preview.inactive_count}",
@@ -308,11 +285,8 @@ def _render_preview(preview, compact: bool = True) -> str:
         f"С ОГРН: {preview.with_ogrn_count}",
         f"С сайтами: {preview.with_website_count}",
         f"С телефонами: {preview.with_phone_count}",
-        f"Отфильтровано по региону: {preview.filtered_by_region_count}",
         f"Отброшено как не компания: {preview.skipped_not_company_count}",
     ]
-    if preview.debug_info.get("region_filter_applied") is False and region_value != "не указан":
-        lines.append("Региональный фильтр Checko не удалось применить через UI. Использован post-filter по адресу.")
     if compact and preview.total_found > PREVIEW_RESULT_LIMIT:
         lines.append(TRUNCATED_RESULTS_NOTICE)
     lines.extend(["", "Первые 5 результатов:"])
@@ -328,30 +302,22 @@ def _render_preview(preview, compact: bool = True) -> str:
 
 def _render_zero_result_preview(preview, *, compact: bool) -> str:
     del compact
-    region_value = preview.region or preview.city or preview.debug_info.get("requested_region") or "не указан"
     okved_value = preview.okved_code or preview.debug_info.get("requested_okved") or "не указан"
     lines = [
         "Поиск компаний завершён, но компаний не найдено",
         "",
         f"ОКВЭД: {okved_value}",
-        f"Регион: {region_value}",
+        "Регион: не используется в Checko, сортировка после импорта",
         f"Final URL: {preview.debug_final_url or '-'}",
         f"Title: {_trim_debug_value(preview.debug_title)}",
         f"HTML: {preview.debug_html_chars} символов",
         f"Текст: {preview.debug_text_chars} символов",
         f"/company/ ссылок найдено: {preview.company_links_found}",
         f"Candidate-блоков найдено: {preview.parser_candidates_count}",
-        f"До region post-filter: {preview.candidates_before_region}",
         f"Profile fetch ok: {preview.profile_fetch_success}",
         f"Profile fetch failed: {preview.profile_fetch_failed}",
         f"Отброшено как не компания: {preview.skipped_not_company_count}",
-        f"Отфильтровано по региону: {preview.filtered_by_region_count}",
     ]
-    if "region_filter_applied" in preview.debug_info:
-        lines.append(f"Region UI applied: {preview.debug_info.get('region_filter_applied')}")
-    if preview.debug_info.get("region_filter_error"):
-        lines.append(f"Region UI error: {preview.debug_info['region_filter_error']}")
-        lines.append("Региональный фильтр Checko не удалось применить через UI. Использован post-filter по адресу.")
     if preview.parser_candidates_count == 0:
         lines.extend(
             [
@@ -365,9 +331,8 @@ def _render_zero_result_preview(preview, *, compact: bool) -> str:
             "",
             "Что проверить:",
             "1. Правильно ли выбран ОКВЭД.",
-            "2. Есть ли компании по этому региону на Checko.",
-            "3. Не показал ли Checko защитную или пустую страницу.",
-            "4. Для диагностики включите CHECKO_HTML_DEBUG=true.",
+            "2. Не показал ли Checko защитную или пустую страницу.",
+            "3. Для диагностики включите CHECKO_HTML_DEBUG=true.",
         ]
     )
     return "\n".join(lines)
@@ -411,7 +376,7 @@ async def _safe_edit_message(message: Message, text: str, *, reply_markup=None) 
                     return
                 if not _is_message_too_long_error(fallback_exc):
                     raise
-                await message.answer(MESSAGE_TOO_LONG_FALLBACK_TEXT, reply_markup=reply_markup)
+                await message.answer(MESSAGE_TOO_LONG_HARD_FALLBACK_TEXT, reply_markup=reply_markup)
                 return
         raise
 

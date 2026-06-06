@@ -30,7 +30,7 @@ def main_menu() -> ReplyKeyboardMarkup:
         [KeyboardButton(text="👤 Мои лиды"), KeyboardButton(text="📞 Продажи")],
         [KeyboardButton(text="📄 КП и документы"), KeyboardButton(text="🧠 AI / Research")],
         [KeyboardButton(text="📊 Аналитика"), KeyboardButton(text="⚙️ Настройки")],
-        [KeyboardButton(text="🔍 Поиск компаний")],
+        [KeyboardButton(text="🔌 Поиск компаний")],
     ]
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
 
@@ -58,7 +58,7 @@ def contact_type_menu() -> ReplyKeyboardMarkup:
 def search_import_menu_markup() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🔍 Поиск компаний", callback_data="menu:search_import:companies")],
+            [InlineKeyboardButton(text="🔌 Поиск компаний", callback_data="menu:search_import:companies")],
             [InlineKeyboardButton(text="📥 Импорт CSV", callback_data="menu:search_import:import_csv")],
             [InlineKeyboardButton(text="🔎 Поиск по CRM", callback_data="menu:search_import:crm_search")],
             [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu:main")],
@@ -70,6 +70,8 @@ def crm_section_menu_markup() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="📋 Список компаний", callback_data="menu:crm:list")],
+            [InlineKeyboardButton(text="🗺 Города и регионы", callback_data="menu:crm:regions")],
+            [InlineKeyboardButton(text="🏙 Компании по городу", callback_data="menu:crm:cities")],
             [InlineKeyboardButton(text="➕ Добавить компанию", callback_data="menu:crm:add")],
             [InlineKeyboardButton(text="🔎 Поиск по CRM", callback_data="menu:crm:search")],
             [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu:main")],
@@ -166,6 +168,10 @@ def company_list_markup(companies: list[Any]) -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text=f"#{company.id} {company.name[:28]}", callback_data=f"company:open:{company.id}")]
         for company in companies
     ]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def simple_menu_markup(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

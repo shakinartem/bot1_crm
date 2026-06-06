@@ -11,6 +11,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 from app.config import Settings, get_settings
+from app.modules.crm.location_utils import extract_region_city_from_address
 from app.modules.legal_discovery.checko_parser import (
     CheckoListItem,
     CheckoParseDiagnostics,
@@ -177,12 +178,11 @@ class CheckoHtmlLegalDiscoveryProvider:
         include_profiles: bool = True,
         concurrency: int | None = None,
     ) -> list[LegalDiscoveredCompany]:
-        del only_main_okved
-        region_query = region or city or self._settings.checko_html_region or None
-        region_target = resolve_checko_region_target(region_query or "") if region_query else None
+        del only_main_okved, city, region
+        region_query = None
         self.last_debug_info = {
             "requested_okved": None,
-            "requested_region": region_query,
+            "requested_region": None,
             "requested_url": None,
             "final_url": None,
             "title": None,
@@ -207,8 +207,8 @@ class CheckoHtmlLegalDiscoveryProvider:
             "debug_snapshot_path": None,
             "before_region_html_path": None,
             "after_region_html_path": None,
-            "region_resolved_district": region_target["federal_district"] if region_target else None,
-            "region_resolved_label": region_target["region_label"] if region_target else None,
+            "region_resolved_district": None,
+            "region_resolved_label": None,
             "region_modal_opened": False,
             "region_district_expanded": False,
             "region_search_filled": False,
@@ -326,11 +326,6 @@ class CheckoHtmlLegalDiscoveryProvider:
                     merged.confidence = "low"
                     if "profile_fetch_failed" not in merged.warnings:
                         merged.warnings.append("profile_fetch_failed")
-                if region_query and not matches_region_filter(merged, region_query):
-                    self.last_debug_info["filtered_by_region_count"] += 1
-                    continue
-                if region_query and not merged.region:
-                    merged.region = region_query
                 status = self._normalize_status(merged.status)
                 merged.status = status
                 if only_active and status == "inactive":
@@ -540,8 +535,9 @@ class CheckoHtmlLegalDiscoveryProvider:
         legal_name = (profile.legal_name if profile else None) or item.legal_name
         short_name = (profile.short_name if profile else None) or item.short_name or legal_name
         address = (profile.legal_address if profile else None) or item.address
-        city = _extract_city_from_address(address)
-        region = _extract_region_from_address(address)
+        normalized_location = extract_region_city_from_address(address or "")
+        city = normalized_location["city"]
+        region = normalized_location["region"]
         status = self._normalize_status((profile.status if profile else None) or item.status)
         return LegalDiscoveredCompany(
             provider=self.code,

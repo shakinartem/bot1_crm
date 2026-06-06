@@ -2,7 +2,7 @@ import re
 from datetime import datetime, timedelta
 from html import escape
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -32,7 +32,9 @@ from app.modules.crm.schemas import (
     Bot2InteractionContext,
     Bot2SalesIntelligenceContext,
     Bot2TaskContext,
+    CitySummary,
     CompanyCreate,
+    RegionSummary,
     CompanyUpdate,
     ContactPointCreate,
     DecisionMakerCreate,
@@ -111,6 +113,63 @@ async def list_companies(
     if priority:
         stmt = stmt.where(Company.priority == priority)
 
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def get_company_regions(session: AsyncSession) -> list[RegionSummary]:
+    result = await session.execute(
+        select(
+            Company.region,
+            func.count(Company.id),
+            func.sum(case((Company.status.not_in([CompanyStatus.DEAL_LOST.value, CompanyStatus.DO_NOT_CONTACT.value]), 1), else_=0)),
+            func.sum(case((Company.phone.is_not(None), 1), else_=0)),
+            func.sum(case((Company.website.is_not(None), 1), else_=0)),
+        )
+        .where(Company.region.is_not(None), Company.region != "")
+        .group_by(Company.region)
+        .order_by(func.count(Company.id).desc(), Company.region.asc())
+    )
+    return [
+        RegionSummary(region=region, total=total, active=active, with_phone=with_phone, with_website=with_website)
+        for region, total, active, with_phone, with_website in result.all()
+    ]
+
+
+async def get_company_cities(session: AsyncSession, region: str | None = None) -> list[CitySummary]:
+    stmt = (
+        select(
+            Company.city,
+            Company.region,
+            func.count(Company.id),
+            func.sum(case((Company.status.not_in([CompanyStatus.DEAL_LOST.value, CompanyStatus.DO_NOT_CONTACT.value]), 1), else_=0)),
+            func.sum(case((Company.phone.is_not(None), 1), else_=0)),
+            func.sum(case((Company.website.is_not(None), 1), else_=0)),
+        )
+        .where(Company.city.is_not(None), Company.city != "")
+        .group_by(Company.city, Company.region)
+        .order_by(func.count(Company.id).desc(), Company.city.asc())
+    )
+    if region:
+        stmt = stmt.where(Company.region == region)
+    result = await session.execute(stmt)
+    return [
+        CitySummary(city=city, region=city_region, total=total, active=active, with_phone=with_phone, with_website=with_website)
+        for city, city_region, total, active, with_phone, with_website in result.all()
+    ]
+
+
+async def list_companies_by_region_city(
+    session: AsyncSession,
+    region: str | None = None,
+    city: str | None = None,
+    limit: int = 50,
+) -> list[Company]:
+    stmt = select(Company).order_by(Company.created_at.desc()).limit(limit)
+    if region:
+        stmt = stmt.where(Company.region == region)
+    if city:
+        stmt = stmt.where(Company.city == city)
     result = await session.execute(stmt)
     return list(result.scalars().all())
 

@@ -76,12 +76,8 @@ class MockBrowserBackend(BrowserBackend):
         return BrowserPageResult(url=url, status="success", final_url=url, html=html, text=html, http_status=200)
 
     async def fetch_checko_list_page(self, url: str, *, region_query: str | None = None) -> BrowserPageResult:
-        from app.modules.legal_discovery.checko_html import resolve_checko_region_target
-
-        region_key = _mock_region_fixture_key(url, region_query)
-        html = self._fixtures.get(region_key) if region_key else None
-        if html is None:
-            html = self._fixtures.get(url)
+        del region_query
+        html = self._fixtures.get(url)
         if html is None:
             return BrowserPageResult(
                 url=url,
@@ -89,30 +85,7 @@ class MockBrowserBackend(BrowserBackend):
                 final_url=url,
                 error_message=f"Mock browser fixture is missing for {url}",
             )
-        debug_data: dict[str, Any] = {}
-        if _meaningful_region_query(region_query):
-            target = resolve_checko_region_target(region_query or "")
-            selected_text = target.get("region_label") or (region_query or "").strip()
-            debug_data.update(
-                {
-                    "region_resolved_district": target.get("federal_district"),
-                    "region_resolved_label": target.get("region_label"),
-                    "region_modal_opened": True,
-                    "region_district_expanded": bool(target.get("federal_district")),
-                    "region_search_filled": True,
-                    "region_option_clicked": selected_text,
-                    "region_checkbox_clicked": True,
-                    "region_apply_clicked": True,
-                    "filter_apply_clicked": True,
-                    "region_filter_applied": True,
-                    "selected_region_text_after_apply": selected_text,
-                    "before_filter_url": url,
-                    "after_filter_url": url,
-                    "before_filter_title": "Checko mock before filter",
-                    "after_filter_title": "Checko mock after filter",
-                    "region_filter_error": None,
-                }
-            )
+        debug_data: dict[str, Any] = {"region_filter_applied": False, "region_filter_error": None}
         return BrowserPageResult(
             url=url,
             status="success",
@@ -181,6 +154,7 @@ class CamoufoxBrowserBackend(BrowserBackend):
     async def fetch_checko_list_page(self, url: str, *, region_query: str | None = None) -> BrowserPageResult:
         if not self._launcher:
             return BrowserPageResult(url=url, status="failed", error_message=CAMOUFOX_INSTALL_MESSAGE)
+        del region_query
         headless = bool(self._settings.camoufox_headless)
         timeout_ms = max(1, int((self._settings.camoufox_timeout or self._settings.checko_html_timeout or 20) * 1000))
         try:
@@ -192,11 +166,11 @@ class CamoufoxBrowserBackend(BrowserBackend):
                     "before_filter_title": await page.title(),
                 }
                 debug_data["before_region_html"] = await page.content()
-                if _meaningful_region_query(region_query):
-                    debug_data.update(await _apply_checko_region_filter(page, region_query or "", timeout_ms))
                 debug_data["after_filter_url"] = page.url
                 debug_data["after_filter_title"] = await page.title()
                 debug_data["after_region_html"] = await page.content()
+                debug_data["region_filter_applied"] = False
+                debug_data["region_filter_error"] = None
                 body_locator = page.locator("body")
                 text_timeout_ms = min(timeout_ms, 5_000)
                 text = ""

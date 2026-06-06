@@ -82,6 +82,23 @@ class CompanyRead(CompanyBase):
     updated_at: datetime
 
 
+class RegionSummary(BaseModel):
+    region: str
+    total: int
+    active: int
+    with_phone: int
+    with_website: int
+
+
+class CitySummary(BaseModel):
+    city: str
+    region: str | None = None
+    total: int
+    active: int
+    with_phone: int
+    with_website: int
+
+
 class DecisionMakerCreate(BaseModel):
     company_id: int
     full_name: str

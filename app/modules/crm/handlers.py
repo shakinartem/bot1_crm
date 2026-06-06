@@ -1,4 +1,5 @@
 import json
+from hashlib import sha1
 
 from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
@@ -32,6 +33,7 @@ from app.modules.crm.keyboards import (
     sales_section_menu_markup,
     search_import_menu_markup,
     settings_section_menu_markup,
+    simple_menu_markup,
     stats_markup,
     stats_company_list_markup,
     status_options_markup,
@@ -51,6 +53,8 @@ from app.modules.crm.service import (
     format_company_card,
     format_datetime,
     get_company,
+    get_company_cities,
+    get_company_regions,
     get_crm_statistics,
     get_task,
     get_task_dashboard,
@@ -58,6 +62,7 @@ from app.modules.crm.service import (
     humanize_interaction_result,
     humanize_interaction_type,
     list_companies,
+    list_companies_by_region_city,
     list_companies_by_status,
     list_interactions,
     parse_due_at_input,
@@ -82,6 +87,8 @@ from app.utils.telegram import get_current_crm_user
 router = Router(name="crm")
 
 CONTACT_TYPE_BY_LABEL = {label: value for value, label in CONTACT_TYPE_LABELS.items()}
+_CRM_REGION_TOKENS: dict[str, str] = {}
+_CRM_CITY_TOKENS: dict[str, tuple[str | None, str]] = {}
 
 
 def _is_skip(text: str | None) -> bool:
@@ -376,6 +383,114 @@ async def _show_settings_section(message: Message, *, edit: bool = False) -> Non
         "Раздел подготовлен. Функция будет добавлена в следующем этапе."
     )
     markup = settings_section_menu_markup()
+    if edit:
+        await _safe_edit_message(message, text, reply_markup=markup)
+        return
+    await message.answer(text, reply_markup=markup)
+
+
+def _region_token(region: str) -> str:
+    token = sha1(region.encode("utf-8")).hexdigest()[:10]
+    _CRM_REGION_TOKENS[token] = region
+    return token
+
+
+def _city_token(region: str | None, city: str) -> str:
+    raw = f"{region or ''}::{city}"
+    token = sha1(raw.encode("utf-8")).hexdigest()[:10]
+    _CRM_CITY_TOKENS[token] = (region, city)
+    return token
+
+
+async def _show_company_regions(message: Message, *, edit: bool = False) -> None:
+    async with async_session_factory() as session:
+        regions = await get_company_regions(session)
+
+    lines = ["🗺 Города и регионы", ""]
+    rows: list[list[InlineKeyboardButton]] = []
+    if not regions:
+        lines.append("В CRM пока нет компаний с заполненным регионом.")
+    else:
+        for item in regions[:10]:
+            lines.append(f"{item.region} — {item.total}")
+            rows.append([InlineKeyboardButton(text=f"{item.region} — {item.total}", callback_data=f"crm:region:{_region_token(item.region)}")])
+    rows.append([InlineKeyboardButton(text="⬅️ К CRM", callback_data="menu:crm:list")])
+    markup = simple_menu_markup(rows)
+    text = "\n".join(lines)
+    if edit:
+        await _safe_edit_message(message, text, reply_markup=markup)
+        return
+    await message.answer(text, reply_markup=markup)
+
+
+async def _show_region_cities(message: Message, region: str, *, edit: bool = False) -> None:
+    async with async_session_factory() as session:
+        cities = await get_company_cities(session, region=region)
+        companies = await list_companies_by_region_city(session, region=region, limit=10)
+
+    lines = [f"🗺 {region}", ""]
+    rows: list[list[InlineKeyboardButton]] = []
+    if cities:
+        lines.append("Города:")
+        for item in cities[:10]:
+            lines.append(f"{item.city} — {item.total}")
+            rows.append([InlineKeyboardButton(text=f"{item.city} — {item.total}", callback_data=f"crm:city:{_city_token(region, item.city)}")])
+    else:
+        lines.append("По этому региону города пока не выделены.")
+    if companies:
+        lines.extend(["", "Первые компании:"])
+        for company in companies[:10]:
+            lines.append(f"#{company.id} {company.name}")
+            rows.append([InlineKeyboardButton(text=f"#{company.id} {company.name[:24]}", callback_data=f"company:open:{company.id}")])
+    rows.append([InlineKeyboardButton(text="⬅️ К регионам", callback_data="menu:crm:regions")])
+    markup = simple_menu_markup(rows)
+    text = "\n".join(lines)
+    if edit:
+        await _safe_edit_message(message, text, reply_markup=markup)
+        return
+    await message.answer(text, reply_markup=markup)
+
+
+async def _show_company_cities(message: Message, *, edit: bool = False) -> None:
+    async with async_session_factory() as session:
+        cities = await get_company_cities(session)
+
+    lines = ["🏙 Компании по городу", ""]
+    rows: list[list[InlineKeyboardButton]] = []
+    if not cities:
+        lines.append("В CRM пока нет компаний с заполненным городом.")
+    else:
+        for item in cities[:12]:
+            suffix = f" ({item.region})" if item.region else ""
+            lines.append(f"{item.city}{suffix} — {item.total}")
+            rows.append([InlineKeyboardButton(text=f"{item.city} — {item.total}", callback_data=f"crm:city:{_city_token(item.region, item.city)}")])
+    rows.append([InlineKeyboardButton(text="⬅️ К CRM", callback_data="menu:crm:list")])
+    markup = simple_menu_markup(rows)
+    text = "\n".join(lines)
+    if edit:
+        await _safe_edit_message(message, text, reply_markup=markup)
+        return
+    await message.answer(text, reply_markup=markup)
+
+
+async def _show_companies_for_city(message: Message, region: str | None, city: str, *, edit: bool = False) -> None:
+    async with async_session_factory() as session:
+        companies = await list_companies_by_region_city(session, region=region, city=city, limit=20)
+
+    title = f"🏙 {city}"
+    if region:
+        title = f"{title} ({region})"
+    lines = [title, ""]
+    rows: list[list[InlineKeyboardButton]] = []
+    if not companies:
+        lines.append("Компании по этому городу пока не найдены.")
+    else:
+        for company in companies[:20]:
+            lines.append(f"#{company.id} {company.name} — {humanize_company_status(company.status)}")
+            rows.append([InlineKeyboardButton(text=f"#{company.id} {company.name[:24]}", callback_data=f"company:open:{company.id}")])
+    rows.append([InlineKeyboardButton(text="⬅️ К городам", callback_data="menu:crm:cities")])
+    markup = simple_menu_markup(rows)
+    text = "\n".join(lines)
     if edit:
         await _safe_edit_message(message, text, reply_markup=markup)
         return
@@ -685,6 +800,24 @@ async def menu_crm_list_callback(callback: CallbackQuery, state: FSMContext) -> 
     await callback.answer()
 
 
+@router.callback_query(F.data == "menu:crm:regions")
+async def menu_crm_regions_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.message:
+        return
+    await state.clear()
+    await _show_company_regions(callback.message, edit=True)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "menu:crm:cities")
+async def menu_crm_cities_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.message:
+        return
+    await state.clear()
+    await _show_company_cities(callback.message, edit=True)
+    await callback.answer()
+
+
 @router.callback_query(F.data == "menu:crm:add")
 async def menu_crm_add_callback(callback: CallbackQuery, state: FSMContext) -> None:
     if not callback.message:
@@ -800,6 +933,35 @@ async def company_list_callback(callback: CallbackQuery, state: FSMContext) -> N
 
     await state.clear()
     await _show_recent_companies(callback.message, edit=True)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("crm:region:"))
+async def crm_region_callback(callback: CallbackQuery) -> None:
+    if not callback.message:
+        await callback.answer("Не удалось открыть регион.", show_alert=True)
+        return
+    token = callback.data.rsplit(":", 1)[-1]
+    region = _CRM_REGION_TOKENS.get(token)
+    if not region:
+        await callback.answer("Регион устарел, откройте список заново.", show_alert=True)
+        return
+    await _show_region_cities(callback.message, region, edit=True)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("crm:city:"))
+async def crm_city_callback(callback: CallbackQuery) -> None:
+    if not callback.message:
+        await callback.answer("Не удалось открыть город.", show_alert=True)
+        return
+    token = callback.data.rsplit(":", 1)[-1]
+    payload = _CRM_CITY_TOKENS.get(token)
+    if not payload:
+        await callback.answer("Город устарел, откройте список заново.", show_alert=True)
+        return
+    region, city = payload
+    await _show_companies_for_city(callback.message, region, city, edit=True)
     await callback.answer()
 
 

@@ -22,8 +22,11 @@
 
 - Fixed Checko validation for candidates without INN on list page.
 - Added real Checko profile URL validation.
-- Added Checko region UI filtering diagnostics.
 - Fixed Telegram preview MESSAGE_TOO_LONG
+- Removed Checko region UI filtering from Telegram flow.
+- Added CRM city/region extraction.
+- Added CRM region/city grouping.
+- Set live Checko headless defaults.
 - Added compact Checko preview rendering
 - Added Checko region target resolver
 - Added Checko region tree UI selection
