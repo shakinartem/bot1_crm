@@ -30,6 +30,11 @@ from app.modules.research.browser_backend import BrowserBackendError
 
 router = Router(name="legal_discovery")
 
+TELEGRAM_PREVIEW_LIMIT = 3500
+PREVIEW_RESULT_LIMIT = 5
+MESSAGE_TOO_LONG_FALLBACK_TEXT = "Preview слишком большой. Сократил вывод. Проверьте debug/CSV."
+TRUNCATED_RESULTS_NOTICE = "Показаны первые 5 результатов. Полная диагностика сохранена в debug/CSV."
+
 DISCOVERY_BROWSER_ERROR_INSTALL_TEXT = (
     'Не удалось открыть Checko через браузерный backend. Проверьте BROWSER_BACKEND=camoufox '
     'и установку Camoufox: python -m pip install -U "camoufox[geoip]" && python -m camoufox fetch'
@@ -52,12 +57,12 @@ class DiscoveryStates(StatesGroup):
     city = State()
 
 
-@router.message(F.text == "🔍 Поиск компаний")
+@router.message(F.text == "🔌 Поиск компаний")
 @router.message(F.text == "/legal_discovery")
 async def discovery_start(message: Message, state: FSMContext) -> None:
     await state.clear()
     await message.answer(
-        "🔍 Поиск компаний\n\n"
+        "🔌 Поиск компаний\n\n"
         "Дальше идём по legal discovery flow:\n"
         "источник -> ОКВЭД -> регион -> лимит -> preview -> import."
     )
@@ -257,47 +262,72 @@ async def _run_preview(
         last_discovery_limit=limit,
     )
     markup = discovery_zero_result_markup() if preview.total_found == 0 else discovery_preview_markup(preview_callback_token(preview.preview_id))
-    await _safe_edit_message(callback.message, _render_preview(preview), reply_markup=markup)
+    await _safe_edit_message(callback.message, _render_preview(preview, compact=True), reply_markup=markup)
     await _safe_callback_answer(callback, "Preview готов.")
 
 
-def _render_preview(preview) -> str:
-    if preview.total_found == 0:
-        return _render_zero_result_preview(preview)
+def truncate_telegram_text(text: str, limit: int = TELEGRAM_PREVIEW_LIMIT) -> str:
+    if limit <= 1:
+        return text[:limit]
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1].rstrip() + "…"
 
+
+def build_message_too_long_fallback_text(text: str, *, limit: int = TELEGRAM_PREVIEW_LIMIT) -> str:
+    compact = truncate_telegram_text(text, limit=limit)
+    if "Проверьте debug/CSV" in compact:
+        return compact
+    suffix = f"\n\n{MESSAGE_TOO_LONG_FALLBACK_TEXT}"
+    if len(compact) + len(suffix) <= limit:
+        return compact + suffix
+    trimmed = truncate_telegram_text(compact, limit=max(1, limit - len(suffix)))
+    return f"{trimmed}{suffix}"
+
+
+def _render_preview(preview, compact: bool = True) -> str:
+    if preview.total_found == 0:
+        return truncate_telegram_text(_render_zero_result_preview(preview, compact=compact))
+
+    region_value = preview.region or preview.city or preview.debug_info.get("requested_region") or "не указан"
+    okved_value = preview.okved_code or preview.debug_info.get("requested_okved") or "не указан"
     lines = [
         "Поиск компаний завершён",
         "",
+        f"ОКВЭД: {okved_value}",
+        f"Регион: {region_value}",
+        f"Final URL: {truncate_telegram_text(preview.debug_final_url or '-', limit=160)}",
+        f"Title: {_trim_debug_value(preview.debug_title)}",
         f"Найдено компаний: {preview.total_found}",
         f"Активных: {preview.active_count}",
         f"Неактивных: {preview.inactive_count}",
         f"Статус неизвестен: {preview.unknown_status_count}",
         f"Новых для CRM: {preview.new_count}",
-        f"Дублей в CRM: {preview.duplicate_count}",
+        f"Дублей: {preview.duplicate_count}",
         f"С ИНН: {preview.with_inn_count}",
         f"С ОГРН: {preview.with_ogrn_count}",
         f"С сайтами: {preview.with_website_count}",
         f"С телефонами: {preview.with_phone_count}",
-        f"Слабые данные: {preview.weak_count}",
-        f"Parser candidates: {preview.parser_candidates_count}",
-        f"До region post-filter: {preview.candidates_before_region}",
-        f"Profile fetch ok: {preview.profile_fetch_success}",
-        f"Profile fetch failed: {preview.profile_fetch_failed}",
         f"Отфильтровано по региону: {preview.filtered_by_region_count}",
         f"Отброшено как не компания: {preview.skipped_not_company_count}",
-        "",
-        "Первые результаты:",
     ]
-    for index, item in enumerate(preview.items[:5], start=1):
+    if preview.debug_info.get("region_filter_applied") is False and region_value != "не указан":
+        lines.append("Региональный фильтр Checko не удалось применить через UI. Использован post-filter по адресу.")
+    if compact and preview.total_found > PREVIEW_RESULT_LIMIT:
+        lines.append(TRUNCATED_RESULTS_NOTICE)
+    lines.extend(["", "Первые 5 результатов:"])
+    for index, item in enumerate(preview.items[:PREVIEW_RESULT_LIMIT], start=1):
         inn_value = item.company.inn or ("будет получен из профиля" if item.company.checko_profile_url else "не получен")
         lines.append(
-            f"{index}. {item.company.legal_name} — ИНН {inn_value} — "
-            f"{item.company.status or 'unknown'} — {item.company.city or item.company.region or 'регион не указан'}"
+            f"{index}. {truncate_telegram_text(item.company.legal_name or 'Unknown company', limit=120)} — "
+            f"ИНН {inn_value} — {item.company.status or 'unknown'} — "
+            f"{truncate_telegram_text(item.company.city or item.company.region or 'регион не указан', limit=80)}"
         )
-    return "\n".join(lines)
+    return truncate_telegram_text("\n".join(lines))
 
 
-def _render_zero_result_preview(preview) -> str:
+def _render_zero_result_preview(preview, *, compact: bool) -> str:
+    del compact
     region_value = preview.region or preview.city or preview.debug_info.get("requested_region") or "не указан"
     okved_value = preview.okved_code or preview.debug_info.get("requested_okved") or "не указан"
     lines = [
@@ -317,16 +347,11 @@ def _render_zero_result_preview(preview) -> str:
         f"Отброшено как не компания: {preview.skipped_not_company_count}",
         f"Отфильтровано по региону: {preview.filtered_by_region_count}",
     ]
-    if preview.debug_snapshot_path:
-        lines.append(f"Debug snapshot: {preview.debug_snapshot_path}")
-    if preview.debug_info.get("before_region_html_path"):
-        lines.append(f"Before region HTML: {preview.debug_info['before_region_html_path']}")
-    if preview.debug_info.get("after_region_html_path"):
-        lines.append(f"After region HTML: {preview.debug_info['after_region_html_path']}")
     if "region_filter_applied" in preview.debug_info:
         lines.append(f"Region UI applied: {preview.debug_info.get('region_filter_applied')}")
     if preview.debug_info.get("region_filter_error"):
         lines.append(f"Region UI error: {preview.debug_info['region_filter_error']}")
+        lines.append("Региональный фильтр Checko не удалось применить через UI. Использован post-filter по адресу.")
     if preview.parser_candidates_count == 0:
         lines.extend(
             [
@@ -372,9 +397,23 @@ async def _safe_edit_message(message: Message, text: str, *, reply_markup=None) 
     try:
         await message.edit_text(text, reply_markup=reply_markup)
     except TelegramBadRequest as exc:
-        if "message is not modified" not in str(exc):
-            raise
-        await message.edit_reply_markup(reply_markup=reply_markup)
+        if _is_message_not_modified_error(exc):
+            await message.edit_reply_markup(reply_markup=reply_markup)
+            return
+        if _is_message_too_long_error(exc):
+            fallback_text = build_message_too_long_fallback_text(text)
+            try:
+                await message.edit_text(fallback_text, reply_markup=reply_markup)
+                return
+            except TelegramBadRequest as fallback_exc:
+                if _is_message_not_modified_error(fallback_exc):
+                    await message.edit_reply_markup(reply_markup=reply_markup)
+                    return
+                if not _is_message_too_long_error(fallback_exc):
+                    raise
+                await message.answer(MESSAGE_TOO_LONG_FALLBACK_TEXT, reply_markup=reply_markup)
+                return
+        raise
 
 
 async def _safe_callback_answer(callback: CallbackQuery, text: str | None = None, *, show_alert: bool = False) -> None:
@@ -384,6 +423,15 @@ async def _safe_callback_answer(callback: CallbackQuery, text: str | None = None
         if _is_expired_callback_error(exc):
             return
         raise
+
+
+def _is_message_not_modified_error(exc: TelegramBadRequest) -> bool:
+    return "message is not modified" in str(exc).lower()
+
+
+def _is_message_too_long_error(exc: TelegramBadRequest) -> bool:
+    detail = str(exc).lower()
+    return "message is too long" in detail or "message_too_long" in detail
 
 
 def _is_expired_callback_error(exc: TelegramBadRequest) -> bool:

@@ -30,9 +30,123 @@ from app.modules.research.browser_backend import (
     get_browser_backend,
 )
 
-
 CAPTCHA_MARKERS = ("captcha", "капча", "проверка", "robot", "робот")
 ACCESS_DENIED_MARKERS = ("access denied", "доступ ограничен", "forbidden", "denied")
+
+POPULAR_REGION_TARGETS: dict[str, dict[str, Any]] = {
+    "саратов": {
+        "federal_district": "Приволжский федеральный округ",
+        "region_label": "64 Саратовская область",
+        "fallback_terms": ["Саратов", "Саратовская область", "64 Саратовская область"],
+    },
+    "москва": {
+        "federal_district": "Центральный федеральный округ",
+        "region_label": "77 Москва",
+        "fallback_terms": ["Москва", "77 Москва"],
+    },
+    "московская область": {
+        "federal_district": "Центральный федеральный округ",
+        "region_label": "50 Московская область",
+        "fallback_terms": ["Московская область", "50 Московская область"],
+    },
+    "санкт петербург": {
+        "federal_district": "Северо-Западный федеральный округ",
+        "region_label": "78 Санкт-Петербург",
+        "fallback_terms": ["Санкт-Петербург", "78 Санкт-Петербург", "Петербург"],
+    },
+    "ленинградская область": {
+        "federal_district": "Северо-Западный федеральный округ",
+        "region_label": "47 Ленинградская область",
+        "fallback_terms": ["Ленинградская область", "47 Ленинградская область"],
+    },
+    "нижегородская область": {
+        "federal_district": "Приволжский федеральный округ",
+        "region_label": "52 Нижегородская область",
+        "fallback_terms": ["Нижегородская область", "52 Нижегородская область", "Нижний Новгород"],
+    },
+    "татарстан": {
+        "federal_district": "Приволжский федеральный округ",
+        "region_label": "16 Республика Татарстан",
+        "fallback_terms": ["Татарстан", "Республика Татарстан", "16 Республика Татарстан"],
+    },
+    "самарская область": {
+        "federal_district": "Приволжский федеральный округ",
+        "region_label": "63 Самарская область",
+        "fallback_terms": ["Самарская область", "63 Самарская область", "Самара"],
+    },
+    "краснодарский край": {
+        "federal_district": "Южный федеральный округ",
+        "region_label": "23 Краснодарский край",
+        "fallback_terms": ["Краснодарский край", "23 Краснодарский край", "Краснодар"],
+    },
+    "ростовская область": {
+        "federal_district": "Южный федеральный округ",
+        "region_label": "61 Ростовская область",
+        "fallback_terms": ["Ростовская область", "61 Ростовская область", "Ростов"],
+    },
+    "пермский край": {
+        "federal_district": "Приволжский федеральный округ",
+        "region_label": "59 Пермский край",
+        "fallback_terms": ["Пермский край", "59 Пермский край", "Пермь"],
+    },
+    "свердловская область": {
+        "federal_district": "Уральский федеральный округ",
+        "region_label": "66 Свердловская область",
+        "fallback_terms": ["Свердловская область", "66 Свердловская область", "Екатеринбург"],
+    },
+    "новосибирская область": {
+        "federal_district": "Сибирский федеральный округ",
+        "region_label": "54 Новосибирская область",
+        "fallback_terms": ["Новосибирская область", "54 Новосибирская область", "Новосибирск"],
+    },
+    "омская область": {
+        "federal_district": "Сибирский федеральный округ",
+        "region_label": "55 Омская область",
+        "fallback_terms": ["Омская область", "55 Омская область", "Омск"],
+    },
+}
+
+REGION_QUERY_ALIASES = {
+    "64": "саратов",
+    "саратовская область": "саратов",
+    "77": "москва",
+    "50": "московская область",
+    "78": "санкт петербург",
+    "47": "ленинградская область",
+    "52": "нижегородская область",
+    "16": "татарстан",
+    "63": "самарская область",
+    "23": "краснодарский край",
+    "61": "ростовская область",
+    "59": "пермский край",
+    "66": "свердловская область",
+    "54": "новосибирская область",
+    "55": "омская область",
+}
+
+
+def resolve_checko_region_target(region_query: str) -> dict[str, Any]:
+    raw = (region_query or "").strip()
+    normalized = _normalize_region_text(raw)
+    canonical = REGION_QUERY_ALIASES.get(normalized, normalized)
+    target = POPULAR_REGION_TARGETS.get(canonical)
+    if target:
+        return {
+            "query": raw,
+            "normalized_query": normalized,
+            "federal_district": target["federal_district"],
+            "region_label": target["region_label"],
+            "fallback_terms": list(target["fallback_terms"]),
+            "quick_search_only": False,
+        }
+    return {
+        "query": raw,
+        "normalized_query": normalized,
+        "federal_district": None,
+        "region_label": None,
+        "fallback_terms": [raw] if raw else [],
+        "quick_search_only": True,
+    }
 
 
 class CheckoHtmlLegalDiscoveryProvider:
@@ -63,7 +177,9 @@ class CheckoHtmlLegalDiscoveryProvider:
         include_profiles: bool = True,
         concurrency: int | None = None,
     ) -> list[LegalDiscoveredCompany]:
+        del only_main_okved
         region_query = region or city or self._settings.checko_html_region or None
+        region_target = resolve_checko_region_target(region_query or "") if region_query else None
         self.last_debug_info = {
             "requested_okved": None,
             "requested_region": region_query,
@@ -91,11 +207,21 @@ class CheckoHtmlLegalDiscoveryProvider:
             "debug_snapshot_path": None,
             "before_region_html_path": None,
             "after_region_html_path": None,
+            "region_resolved_district": region_target["federal_district"] if region_target else None,
+            "region_resolved_label": region_target["region_label"] if region_target else None,
             "region_modal_opened": False,
+            "region_district_expanded": False,
             "region_search_filled": False,
             "region_option_clicked": None,
+            "region_checkbox_clicked": False,
             "region_apply_clicked": False,
+            "filter_apply_clicked": False,
             "region_filter_applied": False,
+            "selected_region_text_after_apply": None,
+            "before_filter_url": None,
+            "after_filter_url": None,
+            "before_filter_title": None,
+            "after_filter_title": None,
             "region_filter_error": None,
             "sample_company_links": [],
             "sample_rejected": [],
@@ -165,7 +291,7 @@ class CheckoHtmlLegalDiscoveryProvider:
                             return
                         try:
                             profile_map[item.profile_url] = parse_checko_profile_page(page.html or "", self._settings.checko_html_base_url)
-                        except Exception as exc:
+                        except Exception:
                             profile_failed_urls.add(item.profile_url)
                             item.warnings.append("profile_parse_failed")
                             self.last_debug_info["profile_fetch_failed"] += 1
@@ -219,11 +345,10 @@ class CheckoHtmlLegalDiscoveryProvider:
 
     def _build_list_urls(self, okved_code: str, limit: int) -> list[str]:
         pages = max(1, min(self._settings.checko_html_max_pages, math.ceil(limit / 20)))
-        results: list[str] = []
-        for page in range(1, pages + 1):
-            params = {"code": okved_code or "all", "page": page}
-            results.append(f"{self._settings.checko_html_base_url.rstrip('/')}/company/select?{urlencode(params)}")
-        return results
+        return [
+            f"{self._settings.checko_html_base_url.rstrip('/')}/company/select?{urlencode({'code': okved_code or 'all', 'page': page})}"
+            for page in range(1, pages + 1)
+        ]
 
     def _resolve_concurrency(self, requested: int | None) -> int:
         value = requested or self._settings.checko_html_profile_concurrency or self._settings.checko_html_concurrency
@@ -265,11 +390,21 @@ class CheckoHtmlLegalDiscoveryProvider:
             }
         )
         for key in (
+            "region_resolved_district",
+            "region_resolved_label",
             "region_modal_opened",
+            "region_district_expanded",
             "region_search_filled",
             "region_option_clicked",
+            "region_checkbox_clicked",
             "region_apply_clicked",
+            "filter_apply_clicked",
             "region_filter_applied",
+            "selected_region_text_after_apply",
+            "before_filter_url",
+            "after_filter_url",
+            "before_filter_title",
+            "after_filter_title",
             "region_filter_error",
         ):
             if key in getattr(page, "debug_data", {}):
@@ -310,6 +445,7 @@ class CheckoHtmlLegalDiscoveryProvider:
         meta_path = debug_dir / f"{stem}.json"
         html_path.write_text(page.html or "", encoding="utf-8")
         text_path.write_text(page.text or "", encoding="utf-8")
+
         before_region_html_path = None
         after_region_html_path = None
         before_region_html = getattr(page, "debug_data", {}).get("before_region_html")
@@ -324,6 +460,7 @@ class CheckoHtmlLegalDiscoveryProvider:
             after_path.write_text(after_region_html, encoding="utf-8")
             after_region_html_path = str(after_path)
             self.last_debug_info["after_region_html_path"] = after_region_html_path
+
         metadata = {
             "requested_url": requested_url,
             "final_url": page.final_url or requested_url,
@@ -345,11 +482,21 @@ class CheckoHtmlLegalDiscoveryProvider:
             "skipped_not_company": diagnostics.to_debug_dict()["skipped_not_company_count"],
             "filtered_by_region": self.last_debug_info.get("filtered_by_region_count", 0),
             "weak_data": self.last_debug_info.get("weak_data_count", 0),
+            "region_resolved_district": self.last_debug_info.get("region_resolved_district"),
+            "region_resolved_label": self.last_debug_info.get("region_resolved_label"),
             "region_modal_opened": self.last_debug_info.get("region_modal_opened", False),
+            "region_district_expanded": self.last_debug_info.get("region_district_expanded", False),
             "region_search_filled": self.last_debug_info.get("region_search_filled", False),
             "region_option_clicked": self.last_debug_info.get("region_option_clicked"),
+            "region_checkbox_clicked": self.last_debug_info.get("region_checkbox_clicked", False),
             "region_apply_clicked": self.last_debug_info.get("region_apply_clicked", False),
+            "filter_apply_clicked": self.last_debug_info.get("filter_apply_clicked", False),
             "region_filter_applied": self.last_debug_info.get("region_filter_applied", False),
+            "selected_region_text_after_apply": self.last_debug_info.get("selected_region_text_after_apply"),
+            "before_filter_url": self.last_debug_info.get("before_filter_url"),
+            "after_filter_url": self.last_debug_info.get("after_filter_url"),
+            "before_filter_title": self.last_debug_info.get("before_filter_title"),
+            "after_filter_title": self.last_debug_info.get("after_filter_title"),
             "region_filter_error": self.last_debug_info.get("region_filter_error"),
             "before_region_html_path": before_region_html_path,
             "after_region_html_path": after_region_html_path,
@@ -465,7 +612,8 @@ def matches_region_filter(company: LegalDiscoveredCompany, region_query: str | N
     normalized_query = _normalize_region_text(region_query)
     if not normalized_query or normalized_query in {"все регионы", "все"}:
         return True
-    variants = _build_region_variants(normalized_query)
+    region_target = resolve_checko_region_target(region_query)
+    variants = _build_region_variants(normalized_query, region_target.get("fallback_terms") or [])
     haystack_parts = [
         company.address,
         company.city,
@@ -481,25 +629,23 @@ def matches_region_filter(company: LegalDiscoveredCompany, region_query: str | N
 def _normalize_region_text(value: str | None) -> str:
     text = (value or "").lower().replace("ё", "е")
     text = re.sub(r"[^\w\s-]+", " ", text, flags=re.UNICODE)
-    text = re.sub(
-        r"\b(\u0433|\u0433\u043e\u0440\u043e\u0434|\u043e\u0431\u043b\u0430\u0441\u0442\u044c|\u043e\u0431\u043b|\u0440\u0435\u0441\u043f\u0443\u0431\u043b\u0438\u043a\u0430|\u0440-\u043d|\u0440\u0430\u0439\u043e\u043d)\b",
-        " ",
-        text,
-    )
+    text = re.sub(r"\b(г|город|область|обл|республика|р-н|район)\b", " ", text)
     text = re.sub(r"\s+", " ", text)
     return text.strip()
 
 
-def _build_region_variants(normalized_query: str) -> set[str]:
+def _build_region_variants(normalized_query: str, fallback_terms: list[str] | None = None) -> set[str]:
     variants = {normalized_query}
-    for token in normalized_query.split():
-        if len(token) < 3:
-            continue
-        variants.add(token)
-        if token.endswith("ская"):
-            variants.add(token[:-4])
-        elif token.endswith("ский"):
-            variants.add(token[:-4])
+    for term in fallback_terms or []:
+        normalized_term = _normalize_region_text(term)
+        if normalized_term:
+            variants.add(normalized_term)
+    for token in list(variants):
+        for part in token.split():
+            if len(part) >= 3:
+                variants.add(part)
+                if part.endswith("ская") or part.endswith("ский"):
+                    variants.add(part[:-4])
     return {item.strip() for item in variants if item.strip()}
 
 

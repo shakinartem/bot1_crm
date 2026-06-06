@@ -6,7 +6,6 @@ from typing import Any
 
 from app.config import Settings, get_settings
 
-
 CAMOUFOX_INSTALL_MESSAGE = (
     'Camoufox is not installed. Run: python -m pip install -U "camoufox[geoip]" && python -m camoufox fetch'
 )
@@ -77,38 +76,52 @@ class MockBrowserBackend(BrowserBackend):
         return BrowserPageResult(url=url, status="success", final_url=url, html=html, text=html, http_status=200)
 
     async def fetch_checko_list_page(self, url: str, *, region_query: str | None = None) -> BrowserPageResult:
+        from app.modules.legal_discovery.checko_html import resolve_checko_region_target
+
         region_key = _mock_region_fixture_key(url, region_query)
-        if region_key and region_key in self._fixtures:
-            html = self._fixtures[region_key]
+        html = self._fixtures.get(region_key) if region_key else None
+        if html is None:
+            html = self._fixtures.get(url)
+        if html is None:
             return BrowserPageResult(
                 url=url,
-                status="success",
+                status="failed",
                 final_url=url,
-                html=html,
-                text=html,
-                http_status=200,
-                debug_data={
-                    "region_modal_opened": True,
-                    "region_search_filled": True,
-                    "region_option_clicked": region_query,
-                    "region_apply_clicked": True,
-                    "region_filter_applied": True,
-                    "region_filter_error": None,
-                },
+                error_message=f"Mock browser fixture is missing for {url}",
             )
-        result = await self.fetch_page(url)
-        if region_query and region_query.strip() and region_query.strip().lower() not in {"все регионы", "all regions"}:
-            result.debug_data.update(
+        debug_data: dict[str, Any] = {}
+        if _meaningful_region_query(region_query):
+            target = resolve_checko_region_target(region_query or "")
+            selected_text = target.get("region_label") or (region_query or "").strip()
+            debug_data.update(
                 {
-                    "region_modal_opened": False,
-                    "region_search_filled": False,
-                    "region_option_clicked": None,
-                    "region_apply_clicked": False,
-                    "region_filter_applied": False,
-                    "region_filter_error": f"Mock browser fixture is missing for region UI flow: {region_query}",
+                    "region_resolved_district": target.get("federal_district"),
+                    "region_resolved_label": target.get("region_label"),
+                    "region_modal_opened": True,
+                    "region_district_expanded": bool(target.get("federal_district")),
+                    "region_search_filled": True,
+                    "region_option_clicked": selected_text,
+                    "region_checkbox_clicked": True,
+                    "region_apply_clicked": True,
+                    "filter_apply_clicked": True,
+                    "region_filter_applied": True,
+                    "selected_region_text_after_apply": selected_text,
+                    "before_filter_url": url,
+                    "after_filter_url": url,
+                    "before_filter_title": "Checko mock before filter",
+                    "after_filter_title": "Checko mock after filter",
+                    "region_filter_error": None,
                 }
             )
-        return result
+        return BrowserPageResult(
+            url=url,
+            status="success",
+            final_url=url,
+            html=html,
+            text=html,
+            http_status=200,
+            debug_data=debug_data,
+        )
 
 
 class CamoufoxBrowserBackend(BrowserBackend):
@@ -121,7 +134,7 @@ class CamoufoxBrowserBackend(BrowserBackend):
         self._launch_error: str | None = None
         try:
             from camoufox.async_api import AsyncCamoufox  # type: ignore
-        except Exception as exc:  # pragma: no cover - depends on optional package
+        except Exception as exc:  # pragma: no cover
             self.enabled = False
             self._launch_error = str(exc) or exc.__class__.__name__
             return
@@ -130,11 +143,7 @@ class CamoufoxBrowserBackend(BrowserBackend):
 
     async def fetch_page(self, url: str) -> BrowserPageResult:
         if not self._launcher:
-            return BrowserPageResult(
-                url=url,
-                status="failed",
-                error_message=CAMOUFOX_INSTALL_MESSAGE,
-            )
+            return BrowserPageResult(url=url, status="failed", error_message=CAMOUFOX_INSTALL_MESSAGE)
         headless = bool(self._settings.camoufox_headless)
         timeout_ms = max(1, int((self._settings.camoufox_timeout or self._settings.checko_html_timeout or 20) * 1000))
         try:
@@ -161,7 +170,7 @@ class CamoufoxBrowserBackend(BrowserBackend):
                     http_status=200,
                     warnings=warnings,
                 )
-        except Exception as exc:  # pragma: no cover - depends on optional package/runtime
+        except Exception as exc:  # pragma: no cover
             message = str(exc) or exc.__class__.__name__
             if _is_timeout_error(exc):
                 return BrowserPageResult(url=url, status="timeout", error_message=f"Camoufox timed out after {timeout_ms} ms")
@@ -178,14 +187,16 @@ class CamoufoxBrowserBackend(BrowserBackend):
             async with self._launcher(headless=headless) as browser:
                 page = await browser.new_page()
                 await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-                debug_data: dict[str, Any] = {}
-                before_html = await page.content()
-                debug_data["before_region_html"] = before_html
+                debug_data: dict[str, Any] = {
+                    "before_filter_url": page.url,
+                    "before_filter_title": await page.title(),
+                }
+                debug_data["before_region_html"] = await page.content()
                 if _meaningful_region_query(region_query):
                     debug_data.update(await _apply_checko_region_filter(page, region_query or "", timeout_ms))
-                after_html = await page.content()
-                debug_data["after_region_html"] = after_html
-                title = await page.title()
+                debug_data["after_filter_url"] = page.url
+                debug_data["after_filter_title"] = await page.title()
+                debug_data["after_region_html"] = await page.content()
                 body_locator = page.locator("body")
                 text_timeout_ms = min(timeout_ms, 5_000)
                 text = ""
@@ -198,14 +209,14 @@ class CamoufoxBrowserBackend(BrowserBackend):
                     url=url,
                     status="success",
                     final_url=page.url,
-                    html=after_html,
+                    html=debug_data["after_region_html"],
                     text=text,
-                    title=title,
+                    title=debug_data["after_filter_title"],
                     http_status=200,
                     warnings=warnings,
                     debug_data=debug_data,
                 )
-        except Exception as exc:  # pragma: no cover - depends on optional package/runtime
+        except Exception as exc:  # pragma: no cover
             message = str(exc) or exc.__class__.__name__
             if _is_timeout_error(exc):
                 return BrowserPageResult(url=url, status="timeout", error_message=f"Camoufox timed out after {timeout_ms} ms")
@@ -217,8 +228,7 @@ class CamoufoxBrowserBackend(BrowserBackend):
 def _is_timeout_error(exc: Exception) -> bool:
     if isinstance(exc, asyncio.TimeoutError):
         return True
-    name = exc.__class__.__name__.lower()
-    return "timeout" in name
+    return "timeout" in exc.__class__.__name__.lower()
 
 
 def _is_browser_fetch_error(message: str) -> bool:
@@ -245,61 +255,155 @@ def _meaningful_region_query(region_query: str | None) -> bool:
 
 
 async def _apply_checko_region_filter(page: Any, region_query: str, timeout_ms: int) -> dict[str, Any]:
+    from app.modules.legal_discovery.checko_html import resolve_checko_region_target
+
+    target = resolve_checko_region_target(region_query)
+    timeout = min(timeout_ms, 5_000)
     debug_data: dict[str, Any] = {
+        "region_resolved_district": target.get("federal_district"),
+        "region_resolved_label": target.get("region_label"),
         "region_modal_opened": False,
+        "region_district_expanded": False,
         "region_search_filled": False,
         "region_option_clicked": None,
+        "region_checkbox_clicked": False,
         "region_apply_clicked": False,
+        "filter_apply_clicked": False,
         "region_filter_applied": False,
+        "selected_region_text_after_apply": None,
         "region_filter_error": None,
     }
+    opener = None
     try:
-        field = page.locator("#location_select_button input").first
-        await field.click(timeout=min(timeout_ms, 5_000))
-        await page.locator("text=Регионы и города").first.wait_for(state="visible", timeout=min(timeout_ms, 5_000))
+        opener = await _first_existing_locator(
+            page,
+            [
+                "#location_select_button",
+                "#location_select_button input",
+                "input[value='Все регионы']",
+                "text=Все регионы",
+            ],
+        )
+        if opener is None:
+            raise RuntimeError("Checko region opener not found")
+        await opener.click(timeout=timeout)
+        modal = await _first_existing_locator(page, ["#location_tree_modal", "text=Регионы и города"])
+        if modal is None:
+            raise RuntimeError("Checko region modal not found")
+        await modal.wait_for(state="visible", timeout=timeout)
         debug_data["region_modal_opened"] = True
 
-        search_input = page.locator("input[placeholder='Быстрый поиск']").first
-        await search_input.fill(region_query, timeout=min(timeout_ms, 5_000))
-        debug_data["region_search_filled"] = True
+        if target.get("federal_district"):
+            district_locator = await _first_existing_locator(
+                page,
+                [
+                    f"text={target['federal_district']}",
+                    f"[title='{target['federal_district']}']",
+                ],
+            )
+            if district_locator is not None:
+                await district_locator.click(timeout=timeout)
+                debug_data["region_district_expanded"] = True
+                await page.wait_for_timeout(300)
+
+        checkbox_label, checkbox_locator = await _locate_region_checkbox(page, target)
+        if checkbox_locator is None:
+            search_input = await _first_existing_locator(page, ["input[placeholder='Быстрый поиск']", "input[placeholder*='Поиск']"])
+            if search_input is None:
+                raise RuntimeError(f"Checko region target not found for {region_query}")
+            await search_input.fill(region_query, timeout=timeout)
+            debug_data["region_search_filled"] = True
+            await page.wait_for_timeout(600)
+            checkbox_label, checkbox_locator = await _locate_region_checkbox(page, target, use_fallback_only=True)
+            if checkbox_locator is None:
+                raise RuntimeError(f"Checko region target not found after quick search for {region_query}")
+
+        await checkbox_locator.click(timeout=timeout)
+        debug_data["region_option_clicked"] = checkbox_label
+        debug_data["region_checkbox_clicked"] = True
+
+        modal_apply = await _first_existing_locator(page, ["button:has-text('Готово')", "text=Готово"])
+        if modal_apply is None:
+            raise RuntimeError("Checko region modal apply button not found")
+        await modal_apply.click(timeout=timeout)
+        debug_data["region_apply_clicked"] = True
         await page.wait_for_timeout(800)
 
-        option_label, option = await _locate_region_option(page, region_query)
-        if option is None:
-            raise RuntimeError(f"Region option not found for {region_query}")
-        await option.click(timeout=min(timeout_ms, 5_000))
-        debug_data["region_option_clicked"] = option_label
+        filter_apply = await _first_existing_locator(page, ["button:has-text('Применить')", "text=Применить"])
+        if filter_apply is not None:
+            await filter_apply.click(timeout=timeout)
+            debug_data["filter_apply_clicked"] = True
 
-        apply_button = page.locator("button:has-text('Готово')").first
-        await apply_button.click(timeout=min(timeout_ms, 5_000))
-        debug_data["region_apply_clicked"] = True
         try:
             await page.wait_for_load_state("networkidle", timeout=min(timeout_ms, 8_000))
         except Exception:
             await page.wait_for_timeout(1500)
 
-        try:
-            selected_value = await field.input_value(timeout=min(timeout_ms, 2_000))
-        except Exception:
-            selected_value = ""
-        normalized_value = selected_value.strip().lower()
-        normalized_query = region_query.strip().lower()
-        debug_data["region_filter_applied"] = bool(normalized_value and normalized_value != "все регионы" and normalized_query in normalized_value)
+        selected_text = await _read_selected_region_text(page)
+        debug_data["selected_region_text_after_apply"] = selected_text
+        normalized_selected = (selected_text or "").lower()
+        expected_terms = [term.lower() for term in target.get("fallback_terms") or [region_query] if term]
+        debug_data["region_filter_applied"] = any(term in normalized_selected for term in expected_terms) if normalized_selected else False
     except Exception as exc:
         debug_data["region_filter_error"] = str(exc) or exc.__class__.__name__
     return debug_data
 
 
-async def _locate_region_option(page: Any, region_query: str) -> tuple[str | None, Any | None]:
-    candidates = [region_query.strip(), f"{region_query.strip()}ская область"]
-    for label in candidates:
-        locator = page.locator(f"text={label}").first
-        if await locator.count():
-            return label, locator
-    contains_locator = page.locator(f"text=/{region_query.strip()}/i").first
-    if await contains_locator.count():
-        return region_query.strip(), contains_locator
+async def _locate_region_checkbox(page: Any, target: dict[str, Any], *, use_fallback_only: bool = False) -> tuple[str | None, Any | None]:
+    labels: list[str] = []
+    if not use_fallback_only and target.get("region_label"):
+        labels.append(target["region_label"])
+    labels.extend(target.get("fallback_terms") or [])
+    seen: set[str] = set()
+    for label in labels:
+        normalized = label.strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        locator = await _first_existing_locator(
+            page,
+            [
+                f"label:has-text('{normalized}') input[type='checkbox']",
+                f"text={normalized}",
+            ],
+        )
+        if locator is not None:
+            return normalized, locator
     return None, None
+
+
+async def _read_selected_region_text(page: Any) -> str:
+    for selector in (
+        "#location_select_button input",
+        "#location_select_button",
+        "input[value*='область']",
+        "input[value*='Москва']",
+    ):
+        locator = page.locator(selector).first
+        try:
+            if await locator.count():
+                try:
+                    value = await locator.input_value(timeout=1000)
+                    if value:
+                        return value.strip()
+                except Exception:
+                    text = await locator.inner_text(timeout=1000)
+                    if text:
+                        return text.strip()
+        except Exception:
+            continue
+    return ""
+
+
+async def _first_existing_locator(page: Any, selectors: list[str]) -> Any | None:
+    for selector in selectors:
+        locator = page.locator(selector).first
+        try:
+            if await locator.count():
+                return locator
+        except Exception:
+            continue
+    return None
 
 
 def get_browser_backend(settings: Settings | None = None) -> BrowserBackend:

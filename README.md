@@ -93,6 +93,7 @@ The current legal discovery flow is OKVED-first and supports:
 
 - popular OKVED catalog via API and Telegram flow
 - Checko HTML preview/import
+- Telegram preview length safety with compact rendering capped to 3500 chars
 - contact/director mapping into CRM
 - optional research queue launch after import
 
@@ -105,6 +106,11 @@ Recommended defaults:
 - first live Checko run: `CHECKO_HTML_CONCURRENCY=3` and `CHECKO_HTML_MAX_PAGES=1`
 
 ### Live Checko validation
+
+- The Checko region tree flow is: open `Все регионы` -> wait for `Регионы и города` -> expand the federal district -> click the region checkbox -> `Готово` -> `Применить`.
+- For Saratov the target path is `Приволжский федеральный округ -> 64 Саратовская область`.
+- If the numbered region row is not found, the flow falls back to `Быстрый поиск` and selects the first matching checkbox row.
+- Telegram preview never sends full HTML/debug JSON; complete diagnostics stay only in `storage/debug/checko/*.json`, `storage/debug/checko/*.html`, `storage/debug/checko/*.txt`, and preview CSV export.
 
 - Start with `limit=5-10`, `CHECKO_HTML_MAX_PAGES=1`, and `CHECKO_HTML_CONCURRENCY=3`.
 - Checko list pages do not reliably expose `???` / `????`; requisites are enriched from the company profile page.

@@ -5,6 +5,10 @@
 - Fixed Checko validation for candidates without INN on list page.
 - Added real Checko profile URL validation.
 - Added Checko region UI filtering.
+- Fixed Telegram MESSAGE_TOO_LONG in Checko preview.
+- Added compact Checko preview rendering.
+- Added Checko region tree selection via UI.
+- Added region resolver for popular Russian regions.
 - Improved Checko profile enrichment flow.
 - Added Checko live debug snapshots.
 - Added parser diagnostics for Checko list pages.

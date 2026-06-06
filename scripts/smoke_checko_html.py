@@ -26,14 +26,23 @@ from app.config import Settings  # noqa: E402
 from app.database import async_session_factory, create_db_schema  # noqa: E402
 from app.modules.crm.models import Company  # noqa: E402
 from app.modules.legal_discovery import service as discovery_service  # noqa: E402
-from app.modules.legal_discovery.checko_html import CheckoHtmlLegalDiscoveryProvider  # noqa: E402
+from app.modules.legal_discovery.checko_html import (  # noqa: E402
+    CheckoHtmlLegalDiscoveryProvider,
+    matches_region_filter,
+    resolve_checko_region_target,
+)
 from app.modules.legal_discovery.checko_parser import (  # noqa: E402
     is_real_checko_profile_url,
     is_probable_checko_company_item,
     parse_checko_list_page_with_diagnostics,
     parse_checko_profile_page,
 )
-from app.modules.legal_discovery.handlers import _render_preview  # noqa: E402
+from app.modules.legal_discovery.handlers import (  # noqa: E402
+    TELEGRAM_PREVIEW_LIMIT,
+    _render_preview,
+    build_message_too_long_fallback_text,
+    truncate_telegram_text,
+)
 from app.modules.legal_discovery.okved_catalog import normalize_okved_code, resolve_okved_by_query  # noqa: E402
 from app.modules.research.browser_backend import BrowserBackendError, DisabledBrowserBackend, MockBrowserBackend  # noqa: E402
 
@@ -187,6 +196,10 @@ async def main() -> None:
     assert parsed_profile.legal_name, "profile parser must preserve legal name"
 
     assert normalize_okved_code("86.23") == "862300", "OKVED normalization must strip punctuation"
+    resolved_region = resolve_checko_region_target(SARATOV)
+    assert resolved_region["federal_district"] == "Приволжский федеральный округ", "Saratov must resolve to Volga federal district"
+    assert "64" in resolved_region["region_label"] and SARATOV_REGION in resolved_region["region_label"], "resolver must provide numbered Saratov label"
+    assert SARATOV in resolved_region["fallback_terms"], "resolver must include quick-search term"
 
     debug_dir = ROOT / "storage" / "debug" / "checko_smoke"
     if debug_dir.exists():
@@ -222,6 +235,9 @@ async def main() -> None:
     assert provider.last_debug_info["company_links_found"] > 0, "provider debug must expose company link count"
     assert provider.last_debug_info["debug_snapshot_path"], "provider must save debug snapshot metadata when debug is enabled"
     assert Path(provider.last_debug_info["debug_snapshot_path"]).exists(), "snapshot metadata file must exist"
+    assert provider.last_debug_info["region_resolved_district"] == "Приволжский федеральный округ", "debug must expose resolved district"
+    assert "64" in (provider.last_debug_info["region_resolved_label"] or ""), "debug must expose resolved numbered region label"
+    assert provider.last_debug_info["region_filter_applied"] is True, "mock region UI flow must mark filter as applied"
 
     live_praktik_profile = build_profile_html(
         legal_name='РћРћРћ Р¤РР РњРђ "РџР РђРљРўРРљ"',
@@ -285,6 +301,7 @@ async def main() -> None:
     assert all(MOSCOW not in (company.address or "") for company in live_companies), "Moscow companies must be filtered out for Saratov query"
     assert all(OMSK not in (company.address or "") for company in live_companies), "Omsk companies must be filtered out for Saratov query"
     assert all(KRASNOYARSK not in (company.address or "") for company in live_companies), "Krasnoyarsk companies must be filtered out for Saratov query"
+    assert all(matches_region_filter(company, SARATOV) for company in live_companies), "post-filter must keep only matching Saratov companies"
 
     failing_provider = CheckoHtmlLegalDiscoveryProvider(
         Settings(
@@ -366,6 +383,12 @@ async def main() -> None:
         assert "CHECKO_HTML_DEBUG=true" in rendered_zero, "zero-result preview must explain parser-zero case"
     finally:
         discovery_service.get_legal_discovery_provider = original_get_provider
+
+    assert truncate_telegram_text("x" * (TELEGRAM_PREVIEW_LIMIT + 50)) == ("x" * (TELEGRAM_PREVIEW_LIMIT - 1)) + "…", "truncate helper must keep Telegram-safe length"
+    long_preview = _render_preview(preview, compact=True) + "\n" + ("debug line\n" * 1000)
+    fallback_preview = build_message_too_long_fallback_text(long_preview)
+    assert len(fallback_preview) <= TELEGRAM_PREVIEW_LIMIT, "MESSAGE_TOO_LONG fallback text must fit Telegram limit"
+    assert "Проверьте debug/CSV" in fallback_preview, "fallback text must direct operator to debug/CSV"
 
     print("smoke_checko_html ok")
 

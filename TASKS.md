@@ -23,6 +23,10 @@
 - Fixed Checko validation for candidates without INN on list page.
 - Added real Checko profile URL validation.
 - Added Checko region UI filtering diagnostics.
+- Fixed Telegram preview MESSAGE_TOO_LONG
+- Added compact Checko preview rendering
+- Added Checko region target resolver
+- Added Checko region tree UI selection
 - Improved Checko profile enrichment flow.
 - CRMUser model
 - User roles foundation

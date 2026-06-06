@@ -22,7 +22,13 @@ from app.config import get_settings  # noqa: E402
 from app.database import async_session_factory, create_db_schema  # noqa: E402
 from app.main import app  # noqa: E402
 from app.modules.crm.service import get_company  # noqa: E402
-from app.modules.legal_discovery.handlers import _render_preview, build_discovery_browser_error_text  # noqa: E402
+from app.modules.legal_discovery.handlers import (  # noqa: E402
+    TELEGRAM_PREVIEW_LIMIT,
+    _render_preview,
+    build_discovery_browser_error_text,
+    build_message_too_long_fallback_text,
+    truncate_telegram_text,
+)
 from app.modules.legal_discovery.keyboards import discovery_preview_markup, discovery_zero_result_markup  # noqa: E402
 from app.modules.legal_discovery.schemas import LegalDiscoveryPreview  # noqa: E402
 from app.modules.legal_discovery.service import import_legal_discovery_preview, preview_callback_token, run_legal_discovery_preview  # noqa: E402
@@ -147,6 +153,51 @@ async def verify_preview_render() -> None:
     assert "Медицинская и стоматологическая практика" not in rendered, "preview must not show category-like rows"
 
 
+def verify_preview_length_helpers() -> None:
+    assert len(truncate_telegram_text("x" * (TELEGRAM_PREVIEW_LIMIT + 50))) <= TELEGRAM_PREVIEW_LIMIT, "truncate helper must fit Telegram limit"
+    preview = LegalDiscoveryPreview(
+        preview_id="preview-long",
+        query="стоматология",
+        okved_code="86.23",
+        okved_title="Стоматология",
+        city="Саратов",
+        region=None,
+        provider="checko_html",
+        total_found=12,
+        active_count=7,
+        inactive_count=2,
+        unknown_status_count=3,
+        with_inn_count=12,
+        with_ogrn_count=12,
+        with_phone_count=10,
+        with_email_count=0,
+        with_website_count=8,
+        with_socials_count=0,
+        with_director_count=0,
+        with_founders_count=0,
+        new_count=9,
+        duplicate_count=3,
+        weak_count=2,
+        filtered_by_region_count=4,
+        skipped_not_company_count=11,
+        invalid_candidates_count=0,
+        parser_candidates_count=20,
+        company_links_found=25,
+        debug_final_url="https://checko.ru/company/select?code=862300&page=1",
+        debug_title="Очень длинный debug title " * 30,
+        debug_html_chars=99999,
+        debug_text_chars=55555,
+        debug_snapshot_path="storage/debug/checko/sample.json",
+        debug_info={"region_filter_error": "ui fallback warning " * 50},
+        items=[],
+    )
+    rendered = _render_preview(preview, compact=True)
+    assert len(rendered) <= TELEGRAM_PREVIEW_LIMIT, "compact preview with debug fields must fit Telegram limit"
+    fallback = build_message_too_long_fallback_text(rendered + "\n" + ("extra\n" * 1000))
+    assert len(fallback) <= TELEGRAM_PREVIEW_LIMIT, "MESSAGE_TOO_LONG fallback must fit Telegram limit"
+    assert "Проверьте debug/CSV" in fallback, "fallback must direct operator to debug/CSV"
+
+
 def verify_zero_result_render() -> None:
     preview = LegalDiscoveryPreview(
         preview_id="preview-zero",
@@ -203,6 +254,7 @@ async def main() -> None:
     verify_preview_markup()
     verify_zero_result_markup()
     await verify_preview_render()
+    verify_preview_length_helpers()
     verify_zero_result_render()
     print("smoke_legal_discovery ok")
 
