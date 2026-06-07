@@ -28,6 +28,7 @@ from app.modules.legal_discovery.handlers import (  # noqa: E402
     truncate_telegram_text,
 )
 from app.modules.legal_discovery.keyboards import discovery_preview_markup, discovery_zero_result_markup  # noqa: E402
+from app.modules.legal_discovery.schemas import LegalDiscoveredCompany, LegalDiscoveryPreview, LegalDiscoveryPreviewItem  # noqa: E402
 from app.modules.legal_discovery.service import import_legal_discovery_preview, preview_callback_token, run_legal_discovery_preview  # noqa: E402
 
 
@@ -78,6 +79,51 @@ async def main() -> None:
     fallback = build_message_too_long_fallback_text("x" * (TELEGRAM_PREVIEW_LIMIT + 500))
     assert len(fallback) <= TELEGRAM_PREVIEW_LIMIT
     assert "Проверьте debug/CSV" in fallback
+
+    custom_preview = LegalDiscoveryPreview(
+        preview_id="preview-test",
+        query="стоматология",
+        okved_code="86.23",
+        provider="checko_html",
+        total_found=1,
+        active_count=1,
+        inactive_count=0,
+        unknown_status_count=0,
+        with_inn_count=1,
+        with_ogrn_count=1,
+        with_phone_count=1,
+        with_email_count=0,
+        with_website_count=1,
+        with_socials_count=0,
+        with_director_count=0,
+        with_founders_count=0,
+        new_count=1,
+        duplicate_count=0,
+        weak_count=0,
+        items=[
+            LegalDiscoveryPreviewItem(
+                status="new",
+                company=LegalDiscoveredCompany(
+                    provider="checko_html",
+                    legal_name='ОБЩЕСТВО С ОГРАНИЧЕННОЙ ОТВЕТСТВЕННОСТЬЮ "МЦ ИНТЕРДЕНТОС"',
+                    short_name='ООО "МЦ ИНТЕРДЕНТОС"',
+                    inn="5018179703",
+                    ogrn="1234567890123",
+                    city="Королёв",
+                    region="Московская область",
+                    status="active",
+                    phones=["+74951234567"],
+                    websites=["https://interdentos.example"],
+                    confidence="high",
+                ),
+            )
+        ],
+        debug_info={},
+    )
+    rendered_custom = _render_preview(custom_preview, compact=True)
+    assert rendered_custom.count("ИНН 5018179703") == 1
+    assert 'ООО "МЦ ИНТЕРДЕНТОС" — Королёв, Московская область — ИНН 5018179703 — действующая' in rendered_custom
+    assert len(rendered_custom) <= TELEGRAM_PREVIEW_LIMIT
 
     print("smoke_legal_discovery ok")
 

@@ -34,6 +34,10 @@ async def main() -> None:
         "region": "Омская область",
         "city": "Омск",
     }
+    assert extract_region_city_from_address("236005, Калининградская область, г. Калининград, ул. Минусинская, д. 22") == {
+        "region": "Калининградская область",
+        "city": "Калининград",
+    }
     assert extract_region_city_from_address("121059, г. Москва, бул. Украинский, 6") == {
         "region": "Москва",
         "city": "Москва",

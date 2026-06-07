@@ -99,6 +99,7 @@ The current legal discovery flow is OKVED-first and supports:
 
 - popular OKVED catalog via API and Telegram flow
 - Checko HTML preview/import
+- Checko list page as the candidate source, with exact requisites enriched from the company profile page
 - Telegram preview length safety with compact rendering capped to 3500 chars
 - contact/director mapping into CRM
 - optional research queue launch after import
@@ -120,7 +121,8 @@ Recommended defaults:
 - Telegram preview never sends full HTML/debug JSON; complete diagnostics stay only in `storage/debug/checko/*.json`, `storage/debug/checko/*.html`, `storage/debug/checko/*.txt`, and preview CSV export.
 
 - Start with `limit=5-10`, `CHECKO_HTML_MAX_PAGES=1`, and `CHECKO_HTML_CONCURRENCY=3`.
-- Checko list pages do not reliably expose `???` / `????`; requisites are enriched from the company profile page.
+- Checko list pages do not reliably expose full requisites; the profile page is the source of truth for cleaned names, status, contacts, and legal requisites.
+- City and region are derived from the Checko profile page address data, with priority to JSON-LD and profile address/contact blocks.
 - The region filter is applied through the Checko UI modal first and then validated again after parsing, so off-region cards are excluded even if Checko shows them.
 - Category-like rows, headers, breadcrumbs, and `Организации 1-50` blocks are skipped before preview.
 - Unknown company status is tracked separately and is not counted as inactive.

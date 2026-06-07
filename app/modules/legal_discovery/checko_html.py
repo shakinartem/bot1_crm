@@ -16,6 +16,7 @@ from app.modules.legal_discovery.checko_parser import (
     CheckoListItem,
     CheckoParseDiagnostics,
     CheckoProfileData,
+    is_suspicious_company_name,
     parse_checko_list_page_with_diagnostics,
     parse_checko_profile_page,
 )
@@ -532,8 +533,10 @@ class CheckoHtmlLegalDiscoveryProvider:
             LegalDiscoveryFounder(full_name=founder.full_name, role=founder.role, inn=founder.inn, share_text=founder.share_text)
             for founder in (profile.founders if profile else [])
         ]
-        legal_name = (profile.legal_name if profile else None) or item.legal_name
-        short_name = (profile.short_name if profile else None) or item.short_name or legal_name
+        legal_name = _prefer_company_name(profile.legal_name if profile else None, item.legal_name)
+        short_name = _prefer_company_name(profile.short_name if profile else None, item.short_name or legal_name)
+        legal_name = legal_name or short_name
+        short_name = short_name or legal_name
         address = (profile.legal_address if profile else None) or item.address
         normalized_location = extract_region_city_from_address(address or "")
         city = normalized_location["city"]
@@ -583,8 +586,8 @@ class CheckoHtmlLegalDiscoveryProvider:
             return "valid"
         if not profile:
             return "weak"
-        legal_name = profile.legal_name or item.legal_name
-        short_name = profile.short_name or item.short_name or legal_name
+        legal_name = _prefer_company_name(profile.legal_name, item.legal_name)
+        short_name = _prefer_company_name(profile.short_name, item.short_name or legal_name)
         if (profile.inn or profile.ogrn) and legal_name and short_name:
             return "valid"
         if legal_name and short_name and item.profile_url and (profile.legal_address or item.address or item.raw_text):
@@ -674,3 +677,9 @@ def _slugify_region(region_query: str | None) -> str:
     normalized = _normalize_region_text(region_query or "all")
     slug = re.sub(r"[^a-zа-я0-9]+", "_", normalized, flags=re.IGNORECASE)
     return slug.strip("_") or "all"
+def _prefer_company_name(candidate: str | None, fallback: str | None) -> str | None:
+    if candidate and not is_suspicious_company_name(candidate):
+        return candidate
+    if fallback and not is_suspicious_company_name(fallback):
+        return fallback
+    return candidate or fallback

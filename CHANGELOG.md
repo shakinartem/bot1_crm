@@ -15,6 +15,11 @@
 - Added parser diagnostics for Checko list pages.
 - Added fallback extraction from /company/ links.
 - Improved zero-result Telegram preview diagnostics.
+- Fixed Checko profile parser to avoid timeline/history text as company name.
+- Added JSON-LD and DOM-based address extraction.
+- Added city/region extraction from Checko profile address.
+- Improved active/inactive status detection.
+- Cleaned Checko Telegram preview formatting.
 - Fixed Checko live parsing to skip category/header rows.
 - Added region post-filter for Checko results.
 - Improved active/inactive/unknown counters.

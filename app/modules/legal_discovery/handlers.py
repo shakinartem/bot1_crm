@@ -291,13 +291,43 @@ def _render_preview(preview, compact: bool = True) -> str:
         lines.append(TRUNCATED_RESULTS_NOTICE)
     lines.extend(["", "Первые 5 результатов:"])
     for index, item in enumerate(preview.items[:PREVIEW_RESULT_LIMIT], start=1):
-        inn_value = item.company.inn or ("будет получен из профиля" if item.company.checko_profile_url else "не получен")
-        lines.append(
-            f"{index}. {truncate_telegram_text(item.company.legal_name or 'Unknown company', limit=120)} — "
-            f"ИНН {inn_value} — {item.company.status or 'unknown'} — "
-            f"{truncate_telegram_text(item.company.city or item.company.region or 'регион не указан', limit=80)}"
-        )
+        lines.append(_render_preview_company_line(index, item.company))
     return truncate_telegram_text("\n".join(lines))
+
+
+def _render_preview_company_line(index: int, company) -> str:
+    name = truncate_telegram_text(company.short_name or company.legal_name or "Unknown company", limit=120)
+    city = company.city or "город не определён"
+    region = company.region or "регион не определён"
+    location = truncate_telegram_text(f"{city}, {region}", limit=100)
+    inn_value = company.inn or ("будет получен из профиля" if company.checko_profile_url else "не получен")
+    status_label = _render_status_label(company.status)
+    contact_summary = _render_contact_summary(company)
+    line = f"{index}. {name} — {location} — ИНН {inn_value} — {status_label}"
+    if contact_summary:
+        line = f"{line} — {contact_summary}"
+    return truncate_telegram_text(line, limit=220)
+
+
+def _render_status_label(status: str | None) -> str:
+    normalized = (status or "").strip().lower()
+    if normalized == "active":
+        return "действующая"
+    if normalized == "inactive":
+        return "неактивная"
+    return "статус неизвестен"
+
+
+def _render_contact_summary(company) -> str:
+    parts: list[str] = []
+    if company.websites:
+        website = company.websites[0].replace("https://", "").replace("http://", "").rstrip("/")
+        parts.append(truncate_telegram_text(website, limit=40))
+    if company.phones:
+        parts.append(truncate_telegram_text(company.phones[0], limit=24))
+    if company.emails:
+        parts.append(truncate_telegram_text(company.emails[0], limit=40))
+    return " / ".join(parts[:3])
 
 
 def _render_zero_result_preview(preview, *, compact: bool) -> str:

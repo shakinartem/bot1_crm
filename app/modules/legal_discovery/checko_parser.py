@@ -44,6 +44,37 @@ COMPANY_SIGNAL_MARKERS = (
     "инн",
     "огрн",
 )
+SUSPICIOUS_NAME_MARKERS = (
+    "изменено с",
+    "изменено на",
+    "полное наименование изменено",
+)
+ACTIVE_STATUS_MARKERS = (
+    "действующая компания",
+    "компания является действующей",
+    "является действующей",
+    "действует",
+)
+INACTIVE_STATUS_MARKERS = (
+    "ликвидирована",
+    "прекратила деятельность",
+    "недействующая компания",
+    "исключена из егрюл",
+)
+IGNORED_WEBSITE_HOST_MARKERS = (
+    "checko.ru",
+    "t.me/",
+    "telegram.",
+    "vk.com",
+    "instagram.com",
+    "wa.me/",
+    "whatsapp",
+    "youtu.be",
+    "youtube.com",
+    "2gis.",
+    "yandex.ru/maps",
+    "maps.yandex",
+)
 
 
 @dataclass(slots=True)
@@ -179,24 +210,31 @@ def is_real_checko_profile_url(url: str | None) -> bool:
 def parse_checko_profile_page(html_text: str, base_url: str = CHECKO_BASE_URL) -> CheckoProfileData:
     lines = _html_to_lines(html_text)
     text = "\n".join(lines)
+    jsonld_org = _extract_jsonld_organization(html_text)
+    short_name = _pick_profile_short_name(html_text, jsonld_org)
+    legal_name = _pick_profile_legal_name(html_text, jsonld_org, fallback_name=short_name)
+    legal_address = _pick_profile_address(html_text, text, jsonld_org)
     profile = CheckoProfileData(
-        short_name=_extract_tag_text(html_text, "h1") or _extract_labeled_value(text, ["Краткое наименование"]),
-        legal_name=_extract_labeled_value(text, ["Полное наименование", "Юридическое наименование"]) or _extract_title_name(html_text),
+        short_name=short_name,
+        legal_name=legal_name,
         inn=_extract_digits_value(text, ["ИНН"]),
         ogrn=_extract_digits_value(text, ["ОГРН"]),
         kpp=_extract_digits_value(text, ["КПП"]),
         okpo=_extract_digits_value(text, ["ОКПО"]),
-        legal_address=_extract_labeled_value(text, ["Юридический адрес", "Адрес"]),
-        status=_extract_labeled_value(text, ["Статус"]) or _extract_status(text),
+        legal_address=legal_address,
+        status=_extract_profile_status(html_text, text, jsonld_org),
         okved_code=_extract_okved_code(text),
         okved_name=_extract_okved_name(text),
-        phones=_dedupe(PHONE_RE.findall(text)),
-        emails=_dedupe(EMAIL_RE.findall(text)),
+        phones=_dedupe(_extract_phone_contacts(html_text, text)),
+        emails=_dedupe(_extract_email_contacts(html_text, text)),
         checko_profile_url=_extract_canonical_url(html_text) or _extract_jsonld_url(html_text),
         text_excerpt=text[:1500] or None,
     )
-    for href, _label in _extract_links(html_text, base_url):
+
+    for href, label in _extract_links(html_text, base_url):
         lowered = href.lower()
+        if _is_placeholder_link(href, label):
+            continue
         if "telegram" in lowered or "t.me/" in lowered:
             profile.telegram_links.append(href)
         elif "vk.com" in lowered:
@@ -209,7 +247,7 @@ def parse_checko_profile_page(html_text: str, base_url: str = CHECKO_BASE_URL) -
             profile.youtube_links.append(href)
         elif "maps.yandex" in lowered or "yandex.ru/maps" in lowered or "2gis" in lowered:
             profile.map_links.append(href)
-        elif href.startswith("http") and "checko.ru" not in lowered:
+        elif href.startswith("http") and not any(marker in lowered for marker in IGNORED_WEBSITE_HOST_MARKERS):
             profile.websites.append(href)
 
     profile.director_name = _extract_labeled_value(text, ["Директор", "Генеральный директор", "Руководитель"])
@@ -218,12 +256,16 @@ def parse_checko_profile_page(html_text: str, base_url: str = CHECKO_BASE_URL) -
     profile.director_since_date = _extract_labeled_value(text, ["Руководитель с", "С даты"])
     profile.founders = _extract_founders(text)
 
-    if not profile.inn or not profile.ogrn or not profile.kpp or not profile.okpo:
+    if not profile.inn or not profile.ogrn or not profile.kpp or not profile.okpo or not profile.legal_address:
         _apply_jsonld_fallback(profile, html_text)
     if not profile.ogrn and profile.checko_profile_url:
         match = re.search(r"-(\d{13,15})/?$", profile.checko_profile_url)
         if match:
             profile.ogrn = match.group(1)
+    if not profile.legal_name:
+        profile.legal_name = profile.short_name
+    if not profile.short_name:
+        profile.short_name = profile.legal_name
     if not profile.inn:
         profile.warnings.append("missing_inn")
     if not profile.ogrn:
@@ -236,39 +278,44 @@ def parse_checko_profile_page(html_text: str, base_url: str = CHECKO_BASE_URL) -
 
 
 def _apply_jsonld_fallback(profile: CheckoProfileData, html_text: str) -> None:
-    payloads = _extract_jsonld_objects(html_text)
-    for item in payloads:
-        item_type = item.get("@type")
-        if item_type != "Organization" and item_type != ["Organization"] and "name" not in item:
-            continue
-        profile.short_name = profile.short_name or _coerce_str(item.get("name"))
-        profile.legal_name = profile.legal_name or _coerce_str(item.get("legalName"))
-        profile.inn = profile.inn or _coerce_str(item.get("taxID"))
-        profile.checko_profile_url = profile.checko_profile_url or _coerce_str(item.get("url"))
-        address = item.get("address")
-        if isinstance(address, dict):
-            profile.legal_address = profile.legal_address or ", ".join(
-                part for part in [_coerce_str(address.get("streetAddress")), _coerce_str(address.get("addressLocality"))] if part
-            )
-        identifiers = item.get("identifier")
-        if isinstance(identifiers, dict):
-            identifiers = [identifiers]
-        if isinstance(identifiers, list):
-            for ident in identifiers:
-                if not isinstance(ident, dict):
-                    continue
-                property_id = _coerce_str(ident.get("propertyID")) or ""
-                value = _coerce_str(ident.get("value"))
-                if not value:
-                    continue
-                if property_id == "ОГРН" and not profile.ogrn:
-                    profile.ogrn = value
-                if property_id == "ИНН" and not profile.inn:
-                    profile.inn = value
-                if property_id == "КПП" and not profile.kpp:
-                    profile.kpp = value
-                if property_id == "ОКПО" and not profile.okpo:
-                    profile.okpo = value
+    item = _extract_jsonld_organization(html_text)
+    if not item:
+        return
+    profile.short_name = profile.short_name or _clean_company_name(_coerce_str(item.get("name")))
+    profile.legal_name = profile.legal_name or _clean_company_name(_coerce_str(item.get("legalName")))
+    profile.inn = profile.inn or _coerce_str(item.get("taxID"))
+    profile.checko_profile_url = profile.checko_profile_url or _coerce_str(item.get("url"))
+    address = item.get("address")
+    if isinstance(address, dict):
+        profile.legal_address = profile.legal_address or _compose_address_from_jsonld(address)
+    identifiers = item.get("identifier")
+    if isinstance(identifiers, dict):
+        identifiers = [identifiers]
+    if isinstance(identifiers, list):
+        for ident in identifiers:
+            if not isinstance(ident, dict):
+                continue
+            property_id = _coerce_str(ident.get("propertyID")) or ""
+            value = _coerce_str(ident.get("value"))
+            if not value:
+                continue
+            if property_id == "ОГРН" and not profile.ogrn:
+                profile.ogrn = value
+            if property_id == "ИНН" and not profile.inn:
+                profile.inn = value
+            if property_id == "КПП" and not profile.kpp:
+                profile.kpp = value
+            if property_id == "ОКПО" and not profile.okpo:
+                profile.okpo = value
+
+
+def is_suspicious_company_name(value: str | None) -> bool:
+    normalized = _normalize_checko_text(value)
+    if not normalized:
+        return False
+    if any(marker in normalized for marker in SUSPICIOUS_NAME_MARKERS):
+        return True
+    return bool(re.search(r"общество\s+с\s+ограниченной.+\s+на\s+общество\s+с\s+ограниченной", normalized))
 
 
 def _extract_jsonld_objects(html_text: str) -> list[dict[str, Any]]:
@@ -286,6 +333,24 @@ def _extract_jsonld_objects(html_text: str) -> list[dict[str, Any]]:
         elif isinstance(parsed, list):
             payloads.extend(item for item in parsed if isinstance(item, dict))
     return payloads
+
+
+def _extract_jsonld_organization(html_text: str) -> dict[str, Any] | None:
+    for item in _extract_jsonld_objects(html_text):
+        for candidate in _iter_jsonld_dicts(item):
+            item_type = candidate.get("@type")
+            normalized_types = {item_type} if isinstance(item_type, str) else set(item_type or [])
+            if "Organization" in normalized_types or candidate.get("legalName") or candidate.get("taxID"):
+                return candidate
+    return None
+
+
+def _iter_jsonld_dicts(item: dict[str, Any]) -> list[dict[str, Any]]:
+    results = [item]
+    graph = item.get("@graph")
+    if isinstance(graph, list):
+        results.extend(graph_item for graph_item in graph if isinstance(graph_item, dict))
+    return results
 
 
 def _extract_links(html_text: str, base_url: str) -> list[tuple[str, str]]:
@@ -341,10 +406,7 @@ def _extract_candidate_blocks(html_text: str) -> list[str]:
 
 
 def _extract_fallback_candidate_blocks(html_text: str, matches: list[re.Match[str]]) -> list[str]:
-    blocks: list[str] = []
-    for match in matches:
-        blocks.append(_extract_nearby_block(html_text, match.start(), match.end(), left_pad=350, right_pad=900))
-    return blocks
+    return [_extract_nearby_block(html_text, match.start(), match.end(), left_pad=350, right_pad=900) for match in matches]
 
 
 def _extract_items_from_blocks(blocks: list[str], base_url: str, diagnostics: CheckoParseDiagnostics) -> list[CheckoListItem]:
@@ -355,7 +417,7 @@ def _extract_items_from_blocks(blocks: list[str], base_url: str, diagnostics: Ch
             continue
         diagnostics.raw_candidates_found += 1
         href = html.unescape(link_match.group("href")).strip()
-        label = _clean_text(link_match.group("label"))
+        label = _clean_company_name(_clean_text(link_match.group("label")))
         cleaned_block = _clean_text(block)
         profile_url = _normalize_company_profile_url(href, base_url)
         item = CheckoListItem(
@@ -375,7 +437,7 @@ def _extract_items_from_blocks(blocks: list[str], base_url: str, diagnostics: Ch
         rejection_reason = _get_checko_company_rejection_reason(item)
         if rejection_reason:
             _count_rejection(diagnostics, rejection_reason)
-            _append_rejected_sample(diagnostics, rejection_reason, label, href, cleaned_block)
+            _append_rejected_sample(diagnostics, rejection_reason, label or "", href, cleaned_block)
             continue
         items.append(item)
     return items
@@ -439,11 +501,8 @@ def _extract_canonical_url(html_text: str) -> str | None:
 
 
 def _extract_jsonld_url(html_text: str) -> str | None:
-    for item in _extract_jsonld_objects(html_text):
-        value = _coerce_str(item.get("url"))
-        if value:
-            return value
-    return None
+    item = _extract_jsonld_organization(html_text)
+    return _coerce_str(item.get("url")) if item else None
 
 
 def _extract_okved_code(text: str) -> str | None:
@@ -462,9 +521,9 @@ def _extract_okved_name(text: str) -> str | None:
 
 def _extract_status(text: str) -> str | None:
     lowered = _normalize_checko_text(text)
-    if "действует" in lowered:
+    if any(marker in lowered for marker in ACTIVE_STATUS_MARKERS):
         return "active"
-    if "ликвид" in lowered or "прекращ" in lowered:
+    if any(marker in lowered for marker in INACTIVE_STATUS_MARKERS) or "ликвид" in lowered or "прекращ" in lowered:
         return "inactive"
     return None
 
@@ -479,12 +538,134 @@ def _extract_director_role(text: str) -> str | None:
 
 def _extract_title_name(html_text: str) -> str | None:
     match = re.search(r"(?is)<title>(.*?)</title>", html_text)
+    return _clean_company_name(_clean_text(match.group(1))) if match else None
+
+
+def _extract_element_text_by_id(html_text: str, element_id: str) -> str | None:
+    match = re.search(
+        fr"""<(?P<tag>[a-z0-9]+)[^>]*\bid=["']{re.escape(element_id)}["'][^>]*>(?P<body>.*?)</(?P=tag)>""",
+        html_text,
+        re.IGNORECASE | re.DOTALL,
+    )
+    return _clean_text(match.group("body")) if match else None
+
+
+def _extract_meta_content(html_text: str, *, property_name: str) -> str | None:
+    match = re.search(
+        fr"""<meta[^>]+(?:property|name)=["']{re.escape(property_name)}["'][^>]+content=["']([^"']+)["']""",
+        html_text,
+        re.IGNORECASE,
+    )
     return _clean_text(match.group(1)) if match else None
 
 
-def _extract_tag_text(html_text: str, tag: str) -> str | None:
-    match = re.search(fr"(?is)<{tag}[^>]*>(.*?)</{tag}>", html_text)
-    return _clean_text(match.group(1)) if match else None
+def _pick_profile_short_name(html_text: str, jsonld_org: dict[str, Any] | None) -> str | None:
+    candidates = [
+        _clean_company_name(_coerce_str((jsonld_org or {}).get("name"))),
+        _clean_company_name(_extract_element_text_by_id(html_text, "cn")),
+        _clean_company_name(_extract_meta_content(html_text, property_name="og:title")),
+        _extract_title_name(html_text),
+    ]
+    return _pick_first_valid_company_name(candidates)
+
+
+def _pick_profile_legal_name(html_text: str, jsonld_org: dict[str, Any] | None, *, fallback_name: str | None) -> str | None:
+    candidates = [
+        _clean_company_name(_coerce_str((jsonld_org or {}).get("legalName"))),
+        _clean_company_name(_extract_element_text_by_id(html_text, "cfn")),
+        _clean_company_name(_extract_labeled_value("\n".join(_html_to_lines(html_text)), ["Полное наименование", "Юридическое наименование"])),
+    ]
+    legal_name = _pick_first_valid_company_name(candidates)
+    return legal_name or fallback_name
+
+
+def _pick_profile_address(html_text: str, text: str, jsonld_org: dict[str, Any] | None) -> str | None:
+    jsonld_address = None
+    if jsonld_org and isinstance(jsonld_org.get("address"), dict):
+        jsonld_address = _compose_address_from_jsonld(jsonld_org["address"])
+    return (
+        jsonld_address
+        or _extract_element_text_by_id(html_text, "copy-address")
+        or _extract_element_text_by_id(html_text, "copy-x-address")
+        or _extract_labeled_value(text, ["Юридический адрес", "Адрес"])
+        or _extract_address_from_meta_description(html_text)
+    )
+
+
+def _extract_profile_status(html_text: str, text: str, jsonld_org: dict[str, Any] | None) -> str | None:
+    candidates = [text, html_text, _coerce_str((jsonld_org or {}).get("description"))]
+    for candidate in candidates:
+        normalized = _normalize_checko_text(candidate)
+        if any(marker in normalized for marker in ACTIVE_STATUS_MARKERS):
+            return "active"
+        if any(marker in normalized for marker in INACTIVE_STATUS_MARKERS):
+            return "inactive"
+    return None
+
+
+def _extract_phone_contacts(html_text: str, text: str) -> list[str]:
+    phones = [_normalize_phone_value(match.group(1)) for match in re.finditer(r"""href=["']tel:([^"']+)["']""", html_text, re.IGNORECASE)]
+    phones.extend(_normalize_phone_value(value) for value in PHONE_RE.findall(text))
+    return [phone for phone in phones if phone]
+
+
+def _extract_email_contacts(html_text: str, text: str) -> list[str]:
+    emails = [html.unescape(match.group(1)).strip() for match in re.finditer(r"""href=["']mailto:([^"']+)["']""", html_text, re.IGNORECASE)]
+    emails.extend(EMAIL_RE.findall(text))
+    return [email for email in emails if email]
+
+
+def _clean_company_name(value: str | None) -> str | None:
+    text = _coerce_str(value)
+    if not text:
+        return None
+    text = re.sub(r"\s+-\s+(?:г\.\s*)?[А-ЯA-ZЁ][^-]+?\s+-\s+ИНН\b.*$", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s+-\s+ИНН\b.*$", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s+\|\s+.*$", "", text)
+    text = re.sub(r"\s+", " ", text).strip(" -")
+    if is_suspicious_company_name(text):
+        return None
+    return text
+
+
+def _pick_first_valid_company_name(candidates: list[str | None]) -> str | None:
+    for candidate in candidates:
+        if candidate and not is_suspicious_company_name(candidate):
+            return candidate
+    return None
+
+
+def _compose_address_from_jsonld(address: dict[str, Any]) -> str | None:
+    parts = [
+        _coerce_str(address.get("postalCode")),
+        _coerce_str(address.get("addressRegion")),
+        _coerce_str(address.get("addressLocality")),
+        _coerce_str(address.get("streetAddress")),
+    ]
+    return ", ".join(part for part in parts if part) or None
+
+
+def _extract_address_from_meta_description(html_text: str) -> str | None:
+    description = _extract_meta_content(html_text, property_name="description")
+    if not description:
+        return None
+    match = re.search(r"юридический адрес[:\s]+(.+?)(?:\.|$)", description, re.IGNORECASE)
+    return match.group(1).strip(" .") if match else None
+
+
+def _normalize_phone_value(value: str | None) -> str | None:
+    digits = re.sub(r"\D+", "", value or "")
+    if len(digits) == 11 and digits.startswith("8"):
+        digits = f"7{digits[1:]}"
+    if len(digits) < 10:
+        return None
+    return f"+{digits}"
+
+
+def _is_placeholder_link(href: str, label: str) -> bool:
+    normalized_label = (label or "").strip()
+    normalized_href = (href or "").strip().lower()
+    return normalized_label in {"—", "-", ""} or normalized_href in {"#", "javascript:void(0)", "javascript:void(0);"}
 
 
 def _extract_digits_value(text: str, labels: list[str]) -> str | None:
@@ -515,7 +696,7 @@ def _clean_text(value: str) -> str:
 
 
 def _html_to_lines(value: str) -> list[str]:
-    normalized = re.sub(r"(?i)</?(div|p|li|tr|td|h1|h2|h3|h4|section|article|br)[^>]*>", "\n", value)
+    normalized = re.sub(r"(?i)</?(div|p|li|tr|td|h1|h2|h3|h4|section|article|br|span)[^>]*>", "\n", value)
     normalized = TAG_RE.sub(" ", normalized)
     normalized = html.unescape(normalized)
     return [re.sub(r"\s+", " ", line).strip() for line in normalized.splitlines() if line.strip()]
@@ -555,16 +736,10 @@ def _dedupe_list_items(items: list[CheckoListItem]) -> list[CheckoListItem]:
 
 def _normalize_checko_text(value: str | None) -> str:
     text = html.unescape((value or "").strip()).lower().replace("ё", "е")
-    text = re.sub(r"[\"'«»“”„]", " ", text)
+    text = re.sub(r"[\"'«»„“”]", " ", text)
     text = re.sub(r"[^\w\s/-]+", " ", text, flags=re.UNICODE)
     text = re.sub(r"\s+", " ", text)
     return text.strip()
-
-
-def _looks_like_company_candidate(label: str | None, raw_text: str | None) -> bool:
-    normalized_label = _normalize_checko_text(label)
-    normalized_raw = _normalize_checko_text(raw_text)
-    return _starts_with_org_form(normalized_label) or _has_company_signals(normalized_raw)
 
 
 def _get_checko_company_rejection_reason(item: CheckoListItem) -> str | None:
@@ -585,10 +760,6 @@ def _get_checko_company_rejection_reason(item: CheckoListItem) -> str | None:
     return None
 
 
-def _starts_with_org_form(normalized_name: str) -> bool:
-    return any(normalized_name.startswith(prefix + " ") or normalized_name == prefix for prefix in ORG_PREFIXES)
-
-
 def _is_category_like_text(normalized_text: str) -> bool:
     return any(marker in normalized_text for marker in CATEGORY_MARKERS)
 
@@ -599,3 +770,4 @@ def _contains_company_range_only(normalized_text: str) -> bool:
 
 def _has_company_signals(normalized_text: str) -> bool:
     return any(marker in normalized_text for marker in COMPANY_SIGNAL_MARKERS)
+

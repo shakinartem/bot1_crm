@@ -149,6 +149,11 @@
 - Added Checko parser diagnostics
 - Added fallback company link extraction
 - Added zero-result debug preview
+- Fixed Checko profile name parsing
+- Fixed Checko status parsing
+- Fixed Checko address/city/region extraction
+- Fixed Telegram preview duplicate INN
+- Added profile parsing smoke fixture
 
 ## Bugs
 
