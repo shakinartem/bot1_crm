@@ -167,16 +167,41 @@ async def discovery_export(callback: CallbackQuery) -> None:
         return
     buffer = StringIO()
     writer = csv.writer(buffer)
-    writer.writerow(["status", "legal_name", "inn", "ogrn", "city", "address", "warnings"])
+    writer.writerow(
+        [
+            "status",
+            "weak_data",
+            "legal_name",
+            "short_name",
+            "inn",
+            "ogrn",
+            "region",
+            "city",
+            "address",
+            "phone",
+            "email",
+            "website",
+            "profile_url",
+            "warnings",
+        ]
+    )
     for item in preview.items:
+        company = item.company
         writer.writerow(
             [
-                item.status,
-                item.company.legal_name,
-                item.company.inn,
-                item.company.ogrn,
-                item.company.city or "",
-                item.company.address or "",
+                company.status or item.business_status,
+                "true" if item.weak_data else "false",
+                company.legal_name or "",
+                company.short_name or "",
+                company.inn or "",
+                company.ogrn or "",
+                company.region or "",
+                company.city or "",
+                company.address or "",
+                (company.phones[0] if company.phones else ""),
+                (company.emails[0] if company.emails else ""),
+                (company.websites[0] if company.websites else ""),
+                company.checko_profile_url or "",
                 "; ".join(item.warnings),
             ]
         )

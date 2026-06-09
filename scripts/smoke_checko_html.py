@@ -167,6 +167,120 @@ async def main() -> None:
     assert companies[0].status == "active"
     assert companies[0].city and companies[0].region
 
+    # ---- 25-company normalization smoke on empty CRM ----
+    from sqlalchemy import delete
+
+    from app.database import Base, engine
+    from app.modules.crm.models import Company
+    from app.modules.legal_discovery.service import run_legal_discovery_preview as run_preview
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    big_fixtures: dict[str, str] = {}
+    big_company_meta: list[tuple[str, str, str]] = []  # (inn, ogrn, address)
+    for index in range(25):
+        inn = f"645{index:07d}"
+        ogrn = f"1026{index:011d}"
+        address = f"410015, Саратовская область, г. Саратов, ул. Тестовая, {index + 1}"
+        profile_url = f"https://checko.ru/company/test-co-{index}-{ogrn}"
+        big_fixtures[profile_url] = build_profile_html(
+            legal_name=f'ООО "ТЕСТОВАЯ КОМПАНИЯ {index + 1}"',
+            short_name=f'ООО "ТЕСТОВАЯ КОМПАНИЯ {index + 1}"',
+            inn=inn,
+            ogrn=ogrn,
+            address=address,
+            profile_url=profile_url,
+        )
+        big_company_meta.append((inn, ogrn, address))
+
+    big_list_html = "\n".join(
+        f'<article class="company-card"><a href="/company/test-co-{index}-{ogrn}">ООО "ТЕСТОВАЯ КОМПАНИЯ {index + 1}"</a><div>Адрес: {address}</div><div>Статус: Действующая компания</div></article>'
+        for index, (inn, ogrn, address) in enumerate(big_company_meta)
+    )
+    # Note: provider builds URL as /company/select?code=...&page=N (no &big=1)
+    big_list_url = "https://checko.ru/company/select?code=862300&page=1"
+    big_fixtures[big_list_url] = f"<html><head><title>Checko 86.23 big</title></head><body>{big_list_html}</body></html>"
+
+    big_provider = CheckoHtmlLegalDiscoveryProvider(
+        Settings(
+            LEGAL_DISCOVERY_PROVIDER="checko_html",
+            CHECKO_HTML_ENABLED="1",
+            CHECKO_HTML_PAGE_DELAY_MS="0",
+            CHECKO_HTML_PROFILE_ENABLED="1",
+            CHECKO_HTML_BASE_URL="https://checko.ru",
+        ),
+        browser_backend=MockBrowserBackend(big_fixtures),
+    )
+    big_companies = await big_provider.search_companies(
+        query="стоматология",
+        okved_code="86.23",
+        city="Саратов",
+        region="Саратовская область",
+        limit=30,
+    )
+    assert len(big_companies) == 25, f"expected 25 companies, got {len(big_companies)}"
+
+    from app.database import async_session_factory as _asf
+    from app.modules.legal_discovery import service as _ld_service
+
+    # Monkey-patch the provider factory so run_legal_discovery_preview reuses
+    # the big provider with our MockBrowserBackend fixtures.
+    _original_get_provider = _ld_service.get_legal_discovery_provider
+    _ld_service.get_legal_discovery_provider = lambda settings=None: big_provider
+    try:
+        async with _asf() as session:
+            await session.execute(delete(Company).where(Company.inn.in_([m[0] for m in big_company_meta])))
+            await session.commit()
+            big_preview = await run_preview(
+                session,
+                query="стоматология",
+                okved_code="86.23",
+                city="Саратов",
+                region="Саратовская область",
+                limit=30,
+            )
+    finally:
+        _ld_service.get_legal_discovery_provider = _original_get_provider
+
+    assert big_preview.total_found == 25
+    assert big_preview.new_count == 25, f"expected new=25 on empty CRM, got {big_preview.new_count}"
+    assert big_preview.duplicate_count == 0, f"expected duplicates=0 on empty CRM, got {big_preview.duplicate_count}"
+    assert big_preview.active_count == 25
+    assert all(item.company.status == "active" for item in big_preview.items)
+    assert all(item.business_status == "active" for item in big_preview.items)
+    assert all(not item.weak_data or "missing_address" not in item.warnings for item in big_preview.items)
+    assert all(item.company.address for item in big_preview.items)
+    for item in big_preview.items:
+        assert "missing_address" not in item.warnings, f"unexpected missing_address for {item.company.inn}: {item.warnings}"
+
+    # CSV export shape check via the same column list as handler
+    csv_columns = [
+        "status", "weak_data", "legal_name", "short_name", "inn", "ogrn",
+        "region", "city", "address", "phone", "email", "website", "profile_url", "warnings",
+    ]
+    first = big_preview.items[0]
+    first_row = {
+        "status": first.company.status or first.business_status,
+        "weak_data": "true" if first.weak_data else "false",
+        "legal_name": first.company.legal_name or "",
+        "short_name": first.company.short_name or "",
+        "inn": first.company.inn or "",
+        "ogrn": first.company.ogrn or "",
+        "region": first.company.region or "",
+        "city": first.company.city or "",
+        "address": first.company.address or "",
+        "phone": first.company.phones[0] if first.company.phones else "",
+        "email": first.company.emails[0] if first.company.emails else "",
+        "website": first.company.websites[0] if first.company.websites else "",
+        "profile_url": first.company.checko_profile_url or "",
+        "warnings": "; ".join(first.warnings),
+    }
+    for col in csv_columns:
+        assert col in first_row, f"missing csv column {col}"
+    assert first_row["status"] == "active", f"expected active status, got {first_row['status']}"
+    assert "missing_address" not in first_row["warnings"], f"unexpected missing_address in CSV row: {first_row['warnings']}"
+
     saratov = extract_region_city_from_address("410015, Саратовская область, г. Саратов, ул. Радищева, 15")
     omsk = extract_region_city_from_address("644010, Омская область, г. Омск, ул. Ленина, 3")
     kaliningrad = extract_region_city_from_address("236005, Калининградская область, г. Калининград, ул. Минусинская, д. 22")

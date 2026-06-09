@@ -1,0 +1,60 @@
+{
+  "requested_url": "https://checko.ru/company/select?code=862300&page=1",
+  "final_url": "https://checko.ru/company/select?code=862300&page=1",
+  "title": "",
+  "status": "success",
+  "html_chars": 737,
+  "text_chars": 737,
+  "okved_code": "862300",
+  "region_query": "РЎР°СЂР°С‚РѕРІ",
+  "contains_company_links": 2,
+  "contains_organisations_text": false,
+  "contains_captcha_words": false,
+  "contains_access_denied_words": false,
+  "parser_candidates_count": 0,
+  "candidates_before_region": 0,
+  "profile_fetch_success": 0,
+  "profile_fetch_failed": 0,
+  "valid_companies_count": 0,
+  "skipped_not_company": 4,
+  "filtered_by_region": 0,
+  "weak_data": 0,
+  "region_modal_opened": false,
+  "region_search_filled": false,
+  "region_option_clicked": null,
+  "region_apply_clicked": false,
+  "region_filter_applied": false,
+  "region_filter_error": "Mock browser fixture is missing for region UI flow: РЎР°СЂР°С‚РѕРІ",
+  "before_region_html_path": null,
+  "after_region_html_path": null,
+  "sample_company_links": [
+    "https://checko.ru/company/meditsinskaya-i-stomatologicheskaya-praktika",
+    "https://checko.ru/company/deyatelnost-v-oblasti-zdravoohraneniya"
+  ],
+  "sample_rejected": [
+    {
+      "reason": "missing_profile_url",
+      "name": "РњРµРґРёС†РёРЅСЃРєР°СЏ Рё СЃС‚РѕРјР°С‚РѕР»РѕРіРёС‡РµСЃРєР°СЏ РїСЂР°РєС‚РёРєР°",
+      "href": "/company/meditsinskaya-i-stomatologicheskaya-praktika",
+      "raw_text": "РњРµРґРёС†РёРЅСЃРєР°СЏ Рё СЃС‚РѕРјР°С‚РѕР»РѕРіРёС‡РµСЃРєР°СЏ РїСЂР°РєС‚РёРєР° РћСЂРіР°РЅРёР·Р°С†РёРё 1-50 РёР· 5175"
+    },
+    {
+      "reason": "missing_profile_url",
+      "name": "Р”РµСЏС‚РµР»СЊРЅРѕСЃС‚СЊ РІ РѕР±Р»Р°СЃС‚Рё Р·РґСЂР°РІРѕРѕС…СЂР°РЅРµРЅРёСЏ",
+      "href": "/company/deyatelnost-v-oblasti-zdravoohraneniya",
+      "raw_text": "Р”РµСЏС‚РµР»СЊРЅРѕСЃС‚СЊ РІ РѕР±Р»Р°СЃС‚Рё Р·РґСЂР°РІРѕРѕС…СЂР°РЅРµРЅРёСЏ"
+    },
+    {
+      "reason": "missing_profile_url",
+      "name": "РњРµРґРёС†РёРЅСЃРєР°СЏ Рё СЃС‚РѕРјР°С‚РѕР»РѕРіРёС‡РµСЃРєР°СЏ РїСЂР°РєС‚РёРєР°",
+      "href": "/company/meditsinskaya-i-stomatologicheskaya-praktika",
+      "raw_text": "РњРµРґРёС†РёРЅСЃРєР°СЏ Рё СЃС‚РѕРјР°С‚РѕР»РѕРіРёС‡РµСЃРєР°СЏ РїСЂР°РєС‚РёРєР° - РћСЂРіР°РЅРёР·Р°С†РёРё РњРµРґРёС†РёРЅСЃРєР°СЏ Рё СЃС‚РѕРјР°С‚РѕР»РѕРіРёС‡РµСЃРєР°СЏ РїСЂР°РєС‚РёРєР° РћСЂРіР°РЅРёР·Р°С†РёРё 1-50 РёР· 5175 РћРїРёСЃР°РЅРёРµ РєР°"
+    },
+    {
+      "reason": "missing_profile_url",
+      "name": "РњРµРґРёС†РёРЅСЃРєР°СЏ Рё СЃС‚РѕРјР°С‚РѕР»РѕРіРёС‡РµСЃРєР°СЏ РїСЂР°РєС‚РёРєР°",
+      "href": "/company/meditsinskaya-i-stomatologicheskaya-praktika",
+      "raw_text": "РњРµРґРёС†РёРЅСЃРєР°СЏ Рё СЃС‚РѕРјР°С‚РѕР»РѕРіРёС‡РµСЃРєР°СЏ РїСЂР°РєС‚РёРєР° РћСЂРіР°РЅРёР·Р°С†РёРё 1-50 РёР· 5175 РћРїРёСЃР°РЅРёРµ РєР°С‚РµРіРѕСЂРёРё РћРљР’Р­Р” 86.23 Р”РµСЏС‚РµР»СЊРЅРѕСЃС‚СЊ РІ РѕР±Р»Р°СЃС‚Рё Р·РґСЂР°РІРѕРѕС…СЂР°РЅРµРЅРё"
+    }
+  ]
+}

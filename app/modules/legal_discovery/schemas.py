@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 DiscoveryConfidence = Literal["low", "medium", "high"]
 PreviewItemStatus = Literal["new", "duplicate_existing", "weak_data", "inactive", "error"]
+BusinessStatus = Literal["active", "inactive", "unknown"]
 ImportMode = Literal["active_new", "all_new", "new_with_websites", "new_with_phone_or_website"]
 
 
@@ -65,6 +66,8 @@ class LegalDiscoveredCompany(BaseModel):
 
 class LegalDiscoveryPreviewItem(BaseModel):
     status: PreviewItemStatus
+    business_status: BusinessStatus = "unknown"
+    weak_data: bool = False
     company: LegalDiscoveredCompany
     duplicate_company_id: int | None = None
     duplicate_reason: str | None = None

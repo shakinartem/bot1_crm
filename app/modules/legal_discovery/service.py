@@ -97,6 +97,7 @@ async def run_legal_discovery_preview(
         new_count=sum(1 for item in items if item.status == "new"),
         duplicate_count=sum(1 for item in items if item.status == "duplicate_existing"),
         weak_count=sum(1 for item in items if item.status == "weak_data"),
+        weak_data_count=sum(1 for item in items if item.weak_data),
         candidates_before_region=int(debug_info.get("candidates_before_region", 0) or 0),
         profile_fetch_success=int(debug_info.get("profile_fetch_success", 0) or 0),
         profile_fetch_failed=int(debug_info.get("profile_fetch_failed", 0) or 0),
@@ -201,29 +202,63 @@ def _resolve_preview(preview_ref: str) -> LegalDiscoveryPreview | None:
 
 
 async def _build_preview_item(session: AsyncSession, company: LegalDiscoveredCompany) -> LegalDiscoveryPreviewItem:
-    warnings = list(company.warnings)
-    if not company.inn or not company.ogrn or not company.legal_name:
-        warnings.append("missing_requisites")
-        return LegalDiscoveryPreviewItem(status="weak_data", company=company, warnings=warnings)
+    warnings = [w for w in (company.warnings or []) if w != "missing_address"]
+    has_address = bool((company.address or "").strip())
+    if not has_address and "missing_address" not in warnings:
+        warnings.append("missing_address")
+
+    has_core_requisites = bool(company.inn and company.ogrn and company.legal_name)
+    business_status = _company_status_kind(company)  # active | inactive | unknown
+
+    if not has_core_requisites:
+        if "missing_requisites" not in warnings:
+            warnings.append("missing_requisites")
+        return LegalDiscoveryPreviewItem(
+            status="weak_data",
+            business_status=business_status,  # type: ignore[arg-type]
+            weak_data=True,
+            company=company,
+            warnings=warnings,
+        )
 
     duplicate = await _find_duplicate_company(session, company)
     if duplicate:
         return LegalDiscoveryPreviewItem(
             status="duplicate_existing",
+            business_status=business_status,  # type: ignore[arg-type]
+            weak_data=False,
             company=company,
             duplicate_company_id=duplicate.id,
             duplicate_reason=_build_duplicate_reason(duplicate, company),
             warnings=warnings,
         )
-    status_kind = _company_status_kind(company)
-    if status_kind == "inactive":
-        return LegalDiscoveryPreviewItem(status="inactive", company=company, warnings=warnings)
-    if status_kind == "unknown":
-        warnings.append("unknown_status")
-        return LegalDiscoveryPreviewItem(status="weak_data", company=company, warnings=warnings)
-    if company.confidence == "low" or warnings:
-        return LegalDiscoveryPreviewItem(status="weak_data", company=company, warnings=warnings)
-    return LegalDiscoveryPreviewItem(status="new", company=company, warnings=warnings)
+
+    if business_status == "inactive":
+        return LegalDiscoveryPreviewItem(
+            status="inactive",
+            business_status="inactive",
+            weak_data=False,
+            company=company,
+            warnings=warnings,
+        )
+
+    weak = False
+    if business_status == "unknown":
+        if "unknown_status" not in warnings:
+            warnings.append("unknown_status")
+        weak = True
+    if company.confidence == "low":
+        weak = True
+    if not has_address:
+        weak = True
+
+    return LegalDiscoveryPreviewItem(
+        status="weak_data" if weak else "new",
+        business_status=business_status,  # type: ignore[arg-type]
+        weak_data=weak,
+        company=company,
+        warnings=warnings,
+    )
 
 
 async def _find_duplicate_company(session: AsyncSession, company: LegalDiscoveredCompany) -> Company | None:
@@ -390,23 +425,26 @@ def _compute_priority(company: LegalDiscoveredCompany) -> str:
 
 def _should_import_item(item: LegalDiscoveryPreviewItem, mode: str, include_weak: bool) -> bool:
     has_requisites = bool(item.company.inn or item.company.ogrn)
-    unknown_status_only = item.status == "weak_data" and set(item.warnings).issubset({"unknown_status"})
+    is_new = item.status in {"new", "weak_data"}
+    is_active = item.business_status == "active"
+    is_inactive = item.business_status == "inactive"
     if mode == "active_new":
-        if not has_requisites:
+        # active + new + has inn/ogrn (+ weak_data if include_weak)
+        if not (has_requisites and is_new and is_active):
             return False
-        if item.status == "weak_data" and not include_weak:
+        if item.weak_data and not include_weak:
             return False
-        return item.status in {"new", "weak_data"} and _is_active(item.company)
+        return True
     if mode == "all_new":
-        if not has_requisites:
+        # all statuses (active/inactive/unknown) + new + has inn/ogrn
+        if not (has_requisites and is_new):
             return False
-        if item.status == "weak_data" and not include_weak and not unknown_status_only:
+        if item.weak_data and not include_weak:
             return False
-        return item.status in {"new", "weak_data", "inactive"}
+        return True
     if mode == "new_with_websites":
-        return has_requisites and bool(item.company.websites) and item.status in {"new", "weak_data"} and (include_weak or item.status != "weak_data")
+        return has_requisites and is_new and bool(item.company.websites) and (not item.weak_data or include_weak)
     if mode == "new_with_phone_or_website":
-        return has_requisites and bool(item.company.phones or item.company.websites) and item.status in {"new", "weak_data"} and (
-            include_weak or item.status != "weak_data"
-        )
+        return has_requisites and is_new and bool(item.company.phones or item.company.websites) and (not item.weak_data or include_weak)
+    del is_inactive
     return False

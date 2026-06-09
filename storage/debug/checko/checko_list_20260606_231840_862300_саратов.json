@@ -1,0 +1,79 @@
+{
+  "requested_url": "https://checko.ru/company/select?code=862300&page=1",
+  "final_url": "https://checko.ru/company/select?code=862300&page=1",
+  "title": "",
+  "status": "success",
+  "html_chars": 108849,
+  "text_chars": 108849,
+  "okved_code": "862300",
+  "region_query": "Саратов",
+  "contains_company_links": 60,
+  "contains_organisations_text": true,
+  "contains_captcha_words": true,
+  "contains_access_denied_words": false,
+  "parser_candidates_count": 50,
+  "candidates_before_region": 0,
+  "profile_fetch_success": 0,
+  "profile_fetch_failed": 0,
+  "valid_companies_count": 0,
+  "skipped_not_company": 13,
+  "filtered_by_region": 0,
+  "weak_data": 0,
+  "region_resolved_district": "Приволжский федеральный округ",
+  "region_resolved_label": "64 Саратовская область",
+  "region_modal_opened": true,
+  "region_district_expanded": true,
+  "region_search_filled": true,
+  "region_option_clicked": "64 Саратовская область",
+  "region_checkbox_clicked": true,
+  "region_apply_clicked": true,
+  "filter_apply_clicked": true,
+  "region_filter_applied": true,
+  "selected_region_text_after_apply": "64 Саратовская область",
+  "before_filter_url": "https://checko.ru/company/select?code=862300&page=1",
+  "after_filter_url": "https://checko.ru/company/select?code=862300&page=1",
+  "before_filter_title": "Checko mock before filter",
+  "after_filter_title": "Checko mock after filter",
+  "region_filter_error": null,
+  "before_region_html_path": null,
+  "after_region_html_path": null,
+  "sample_company_links": [
+    "https://checko.ru/company/select?code=all",
+    "https://checko.ru/company/select?code=all",
+    "https://checko.ru/company/select?code=all",
+    "https://checko.ru/company/select?code=860000",
+    "https://checko.ru/company/select?code=862000"
+  ],
+  "sample_rejected": [
+    {
+      "reason": "missing_profile_url",
+      "name": "Организации",
+      "href": "https://checko.ru/company/select?code=all",
+      "raw_text": "Организации"
+    },
+    {
+      "reason": "missing_profile_url",
+      "name": "Деятельность в области здравоохранения",
+      "href": "https://checko.ru/company/select?code=860000",
+      "raw_text": "Деятельность в области здравоохранения"
+    },
+    {
+      "reason": "missing_profile_url",
+      "name": "Медицинская и стоматологическая практика",
+      "href": "https://checko.ru/company/select?code=862000",
+      "raw_text": "Медицинская и стоматологическая практика"
+    },
+    {
+      "reason": "missing_profile_url",
+      "name": "Организации",
+      "href": "/company/select?code=all",
+      "raw_text": "\"container-xl\"> Организации ИП Беларусь Подписка PRO Мой бизнес API <a rel=\"nofollow\" c"
+    },
+    {
+      "reason": "missing_profile_url",
+      "name": "Организации",
+      "href": "/company/select?code=all",
+      "raw_text": "\"offcanvas offcanvas-end\" tabindex=\"-1\" id=\"menu\" style=\"width:340px\"> Организации Индивидуальные предприниматели Беларусь Подписка PRO Мой бизнес Базы данных API Правовая информация Источники данных Пользовательское соглашение <a rel=\"nofo"
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "requested_url": "https://checko.ru/company/select?code=862300&page=1",
+  "final_url": "https://checko.ru/company/select?code=862300&page=1",
+  "title": "Стоматологическая практика - Организации 1-50 из 31475",
+  "status": "success",
+  "html_chars": 108849,
+  "text_chars": 15261,
+  "okved_code": "862300",
+  "region_query": "Саратов",
+  "contains_company_links": 60,
+  "contains_organisations_text": true,
+  "contains_captcha_words": false,
+  "contains_access_denied_words": false,
+  "parser_candidates_count": 50,
+  "valid_companies_count": 0,
+  "skipped_not_company": 13,
+  "filtered_by_region": 0,
+  "sample_company_links": [
+    "https://checko.ru/company/select?code=all",
+    "https://checko.ru/company/select?code=all",
+    "https://checko.ru/company/select?code=all",
+    "https://checko.ru/company/select?code=860000",
+    "https://checko.ru/company/select?code=862000"
+  ],
+  "sample_rejected": [
+    {
+      "reason": "missing_profile_url",
+      "name": "Организации",
+      "href": "https://checko.ru/company/select?code=all",
+      "raw_text": "Организации"
+    },
+    {
+      "reason": "missing_profile_url",
+      "name": "Деятельность в области здравоохранения",
+      "href": "https://checko.ru/company/select?code=860000",
+      "raw_text": "Деятельность в области здравоохранения"
+    },
+    {
+      "reason": "missing_profile_url",
+      "name": "Медицинская и стоматологическая практика",
+      "href": "https://checko.ru/company/select?code=862000",
+      "raw_text": "Медицинская и стоматологическая практика"
+    },
+    {
+      "reason": "missing_profile_url",
+      "name": "Организации",
+      "href": "/company/select?code=all",
+      "raw_text": "\"container-xl\"> Организации ИП Беларусь Подписка PRO Мой бизнес API <a rel=\"nofollow\" c"
+    },
+    {
+      "reason": "missing_profile_url",
+      "name": "Организации",
+      "href": "/company/select?code=all",
+      "raw_text": "\"offcanvas offcanvas-end\" tabindex=\"-1\" id=\"menu\" style=\"width:340px\"> Организации Индивидуальные предприниматели Беларусь Подписка PRO Мой бизнес Базы данных API Правовая информация Источники данных Пользовательское соглашение <a rel=\"nofo"
+    }
+  ]
+}
