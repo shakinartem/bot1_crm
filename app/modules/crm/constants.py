@@ -63,6 +63,16 @@ class TaskStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class TouchStage(StrEnum):
+    TOUCH_1_FIRST_CONTACT = "touch_1_first_contact"
+    TOUCH_2_VALUE_MESSAGE = "touch_2_value_message"
+    TOUCH_3_CASE_OR_PROBLEM = "touch_3_case_or_problem"
+    TOUCH_4_DIAGNOSTIC_OFFER = "touch_4_diagnostic_offer"
+    TOUCH_5_FOLLOW_UP = "touch_5_follow_up"
+    TOUCH_6_OBJECTION_HANDLING = "touch_6_objection_handling"
+    TOUCH_7_FINAL_ATTEMPT = "touch_7_final_attempt"
+
+
 class CRMUserRole(StrEnum):
     OWNER = "owner"
     ADMIN = "admin"

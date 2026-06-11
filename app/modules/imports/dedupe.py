@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from app.modules.research.phone_parser import normalize_phone_ru
+
 
 LEGAL_PREFIX_RE = re.compile(r"^(?:ооо|ип|ао|зао|оао|пао)\s+")
 QUOTE_TRANSLATION = str.maketrans("", "", "\"'`«»")
@@ -75,14 +77,10 @@ class DeduplicationIndex:
 
 
 def normalize_phone(value: str | None) -> str | None:
-    if not value:
+    normalized = normalize_phone_ru(value or "")
+    if not normalized:
         return None
-    digits = "".join(char for char in value if char.isdigit())
-    if not digits:
-        return None
-    if len(digits) == 11 and digits.startswith("8"):
-        digits = "7" + digits[1:]
-    return digits
+    return normalized.lstrip("+")
 
 
 def normalize_website(value: str | None) -> str | None:

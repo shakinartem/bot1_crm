@@ -106,6 +106,7 @@ async def list_companies(
     priority: str | None = None,
 ) -> list[Company]:
     stmt = select(Company).order_by(Company.created_at.desc()).limit(limit).offset(offset)
+    stmt = stmt.where(Company.deleted_at.is_(None))
     if status:
         stmt = stmt.where(Company.status == status)
     if city:
@@ -126,7 +127,7 @@ async def get_company_regions(session: AsyncSession) -> list[RegionSummary]:
             func.sum(case((Company.phone.is_not(None), 1), else_=0)),
             func.sum(case((Company.website.is_not(None), 1), else_=0)),
         )
-        .where(Company.region.is_not(None), Company.region != "")
+        .where(Company.deleted_at.is_(None), Company.region.is_not(None), Company.region != "")
         .group_by(Company.region)
         .order_by(func.count(Company.id).desc(), Company.region.asc())
     )
@@ -146,7 +147,7 @@ async def get_company_cities(session: AsyncSession, region: str | None = None) -
             func.sum(case((Company.phone.is_not(None), 1), else_=0)),
             func.sum(case((Company.website.is_not(None), 1), else_=0)),
         )
-        .where(Company.city.is_not(None), Company.city != "")
+        .where(Company.deleted_at.is_(None), Company.city.is_not(None), Company.city != "")
         .group_by(Company.city, Company.region)
         .order_by(func.count(Company.id).desc(), Company.city.asc())
     )
@@ -166,6 +167,7 @@ async def list_companies_by_region_city(
     limit: int = 50,
 ) -> list[Company]:
     stmt = select(Company).order_by(Company.created_at.desc()).limit(limit)
+    stmt = stmt.where(Company.deleted_at.is_(None))
     if region:
         stmt = stmt.where(Company.region == region)
     if city:
@@ -183,7 +185,7 @@ async def list_companies_by_status(
 ) -> list[Company]:
     result = await session.execute(
         select(Company)
-        .where(Company.status == status)
+        .where(Company.deleted_at.is_(None), Company.status == status)
         .order_by(Company.created_at.desc())
         .limit(limit)
         .offset(offset)
@@ -208,7 +210,7 @@ async def list_bot2_consultation_ready(
 async def get_company(session: AsyncSession, company_id: int) -> Company | None:
     result = await session.execute(
         select(Company)
-        .where(Company.id == company_id)
+        .where(Company.id == company_id, Company.deleted_at.is_(None))
         .options(
             selectinload(Company.decision_makers),
             selectinload(Company.contacts),
@@ -245,12 +247,22 @@ async def update_company(session: AsyncSession, company_id: int, payload: Compan
     return company
 
 
-async def delete_company(session: AsyncSession, company_id: int) -> bool:
+async def delete_company(session: AsyncSession, company_id: int, *, deleted_by_user_id: int | None = None) -> bool:
     company = await get_company(session, company_id)
     if not company:
         return False
 
-    await session.delete(company)
+    company.deleted_at = datetime.utcnow()
+    company.deleted_by_user_id = deleted_by_user_id
+    session.add(
+        LeadInteraction(
+            company_id=company_id,
+            type=InteractionType.NOTE.value,
+            summary="Company soft deleted",
+            created_by="api",
+            created_by_user_id=deleted_by_user_id,
+        )
+    )
     await session.commit()
     return True
 
@@ -273,6 +285,7 @@ async def search_companies(session: AsyncSession, query: str, limit: int = 10) -
                 ContactPoint.value.ilike(pattern),
             )
         )
+        .where(Company.deleted_at.is_(None))
         .order_by(Company.created_at.desc())
         .limit(limit)
     )

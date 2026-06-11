@@ -11,6 +11,7 @@ from app.modules.crm.location_utils import extract_region_city_from_address
 from app.modules.crm.models import Company, ContactPoint, DecisionMaker, LeadInteraction
 from app.modules.enrichment.schemas import dump_json_text
 from app.modules.intelligence.models import IntelligenceSnapshot
+from app.modules.lead_fit.service import recalculate_companies_lead_fit
 from app.modules.legal_discovery.providers import get_legal_discovery_provider
 from app.modules.legal_discovery.schemas import (
     LegalDiscoveredCompany,
@@ -20,6 +21,8 @@ from app.modules.legal_discovery.schemas import (
     LegalDiscoveryPreviewItem,
 )
 from app.modules.research.browser_backend import BrowserBackendError
+from app.modules.research.phone_parser import normalize_phone_ru
+from app.modules.research.website_resolver import is_denied_website_url, normalize_website_url
 
 
 _PREVIEW_REGISTRY: dict[str, LegalDiscoveryPreview] = {}
@@ -180,6 +183,12 @@ async def import_legal_discovery_preview(
             result.errors.append(str(exc))
 
     await session.commit()
+    if result.added_company_ids:
+        try:
+            await recalculate_companies_lead_fit(session, result.added_company_ids)
+        except Exception as exc:
+            result.errors_count += 1
+            result.errors.append(f"Lead fit warning: {exc}")
     if run_research_after_import and result.added_company_ids:
         from app.modules.research_queue.service import create_research_jobs_for_companies
 
@@ -291,6 +300,12 @@ async def _sync_company_contacts(session: AsyncSession, company: Company, discov
     for contact_type, values in contact_map.items():
         for value in values:
             clean = (value or "").strip()
+            if contact_type == "phone":
+                clean = normalize_phone_ru(clean) or ""
+            if contact_type == "website":
+                clean = normalize_website_url(clean)
+                if is_denied_website_url(clean):
+                    continue
             key = (contact_type, clean.lower())
             if not clean or key in existing:
                 continue
@@ -305,9 +320,17 @@ async def _sync_company_contacts(session: AsyncSession, company: Company, discov
             )
             existing.add(key)
     if discovered.websites and not company.website:
-        company.website = discovered.websites[0]
+        for website in discovered.websites:
+            normalized = normalize_website_url(website)
+            if normalized and not is_denied_website_url(normalized):
+                company.website = normalized
+                break
     if discovered.phones and not company.phone:
-        company.phone = discovered.phones[0]
+        for phone in discovered.phones:
+            normalized_phone = normalize_phone_ru(phone)
+            if normalized_phone:
+                company.phone = normalized_phone
+                break
 
 
 async def _sync_company_decision_maker(

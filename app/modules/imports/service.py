@@ -24,6 +24,7 @@ from app.modules.imports.dedupe import (
     normalize_phone,
     normalize_website,
 )
+from app.modules.lead_fit.service import recalculate_companies_lead_fit
 
 
 ImportMode = Literal["skip", "update"]
@@ -290,6 +291,13 @@ async def import_companies_from_csv(
         report.added += 1
         report.added_company_ids.append(company.id)
         dedupe_index.add(_company_identity_from_model(company))
+
+    imported_company_ids = [*report.added_company_ids, *report.updated_company_ids]
+    if imported_company_ids:
+        try:
+            await recalculate_companies_lead_fit(session, imported_company_ids)
+        except Exception as exc:
+            report.errors.append(f"Lead fit warning: {exc}")
 
     return report.as_dict()
 

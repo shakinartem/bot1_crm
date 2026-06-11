@@ -20,6 +20,7 @@ class Settings(BaseSettings):
 
     storage_path: Path = Field(default=Path("./storage"), alias="STORAGE_PATH")
     admin_ids: str = Field(default="", alias="ADMIN_IDS")
+    allow_db_reset: bool = Field(default=False, alias="ALLOW_DB_RESET")
     default_new_user_role: str = Field(default="manager", alias="DEFAULT_NEW_USER_ROLE")
     crm_auto_create_users: bool = Field(default=True, alias="CRM_AUTO_CREATE_USERS")
     crm_owner_telegram_ids: str = Field(default="", alias="CRM_OWNER_TELEGRAM_IDS")
@@ -31,6 +32,8 @@ class Settings(BaseSettings):
     dadata_secret: str = Field(default="", alias="DADATA_SECRET")
     yandex_search_api_key: str = Field(default="", alias="YANDEX_SEARCH_API_KEY")
     yandex_search_folder_id: str = Field(default="", alias="YANDEX_SEARCH_FOLDER_ID")
+    yandex_search_timeout: int = Field(default=15, alias="YANDEX_SEARCH_TIMEOUT")
+    yandex_search_limit: int = Field(default=10, alias="YANDEX_SEARCH_LIMIT")
     google_search_api_key: str = Field(default="", alias="GOOGLE_SEARCH_API_KEY")
     google_search_engine_id: str = Field(default="", alias="GOOGLE_SEARCH_ENGINE_ID")
     intelligence_request_timeout: int = Field(default=10, alias="INTELLIGENCE_REQUEST_TIMEOUT")

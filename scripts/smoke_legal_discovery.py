@@ -59,6 +59,8 @@ async def main() -> None:
         assert imported.added_count >= 1
         company = await session.scalar(select(Company).where(Company.id == imported.added_company_ids[0]))
         assert company is not None
+        assert company.lead_fit_group is not None
+        assert company.lead_fit_score is not None
 
         second_import = await import_legal_discovery_preview(session, preview_callback_token(preview.preview_id), "active_new")
         assert second_import.added_count == 0

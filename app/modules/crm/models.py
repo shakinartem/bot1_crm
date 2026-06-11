@@ -78,12 +78,17 @@ class Company(Base):
     assigned_user_id: Mapped[int | None] = mapped_column(ForeignKey("crm_users.id", ondelete="SET NULL"), nullable=True, index=True)
     created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("crm_users.id", ondelete="SET NULL"), nullable=True)
     updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("crm_users.id", ondelete="SET NULL"), nullable=True)
+    deleted_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("crm_users.id", ondelete="SET NULL"), nullable=True)
+    lead_fit_score: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    lead_fit_group: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    lead_fit_calculated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
     )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 
     decision_makers: Mapped[list["DecisionMaker"]] = relationship(
         back_populates="company",
@@ -136,6 +141,9 @@ class Company(Base):
     updated_by_user: Mapped[CRMUser | None] = relationship(
         back_populates="updated_companies",
         foreign_keys=[updated_by_user_id],
+    )
+    deleted_by_user: Mapped[CRMUser | None] = relationship(
+        foreign_keys=[deleted_by_user_id],
     )
 
 
@@ -226,6 +234,7 @@ class FollowUpTask(Base):
     due_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(64), default=TaskStatus.OPEN.value, index=True)
     priority: Mapped[str] = mapped_column(String(32), default=LeadPriority.MEDIUM.value, index=True)
+    interaction_stage: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     assigned_user_id: Mapped[int | None] = mapped_column(ForeignKey("crm_users.id", ondelete="SET NULL"), nullable=True, index=True)
     created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("crm_users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

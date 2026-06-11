@@ -11,6 +11,7 @@ from app.modules.crm.constants import (
     InteractionType,
     LeadPriority,
     TaskStatus,
+    TouchStage,
 )
 from app.modules.enrichment.schemas import Bot2EnrichmentContextRead
 from app.modules.intelligence.schemas import Bot2IntelligenceContextRead
@@ -78,6 +79,11 @@ class CompanyRead(CompanyBase):
     id: int
     status: str
     priority: str
+    lead_fit_score: int | None = None
+    lead_fit_group: str | None = None
+    lead_fit_calculated_at: datetime | None = None
+    deleted_at: datetime | None = None
+    deleted_by_user_id: int | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -162,6 +168,7 @@ class FollowUpTaskCreate(BaseModel):
     due_at: datetime | None = None
     status: TaskStatus = TaskStatus.OPEN
     priority: LeadPriority = LeadPriority.MEDIUM
+    interaction_stage: TouchStage | None = None
     assigned_user_id: int | None = None
     created_by_user_id: int | None = None
 
@@ -172,6 +179,7 @@ class FollowUpTaskUpdate(BaseModel):
     due_at: datetime | None = None
     status: TaskStatus | None = None
     priority: LeadPriority | None = None
+    interaction_stage: TouchStage | None = None
     completed_at: datetime | None = None
     assigned_user_id: int | None = None
 
@@ -212,6 +220,8 @@ class Bot2CompanyContext(BaseModel):
     source: str | None = None
     status: str
     priority: str
+    lead_fit_score: int | None = None
+    lead_fit_group: str | None = None
     notes: str | None = None
     assigned_user_id: int | None = None
     created_by_user_id: int | None = None
@@ -263,6 +273,7 @@ class Bot2TaskContext(BaseModel):
     due_at: datetime | None = None
     priority: str
     status: str
+    interaction_stage: str | None = None
     assigned_user_id: int | None = None
 
     model_config = ConfigDict(from_attributes=True)

@@ -20,6 +20,14 @@
 
 ## Done
 
+- Website denylist and health check
+- Yandex website search by INN/name/city foundation
+- Improved phone parser
+- Post-import lead fit scoring
+- Lead fit groups A/B/C/D/Excluded
+- 7 touches backend workflow
+- Company soft delete
+- Dev database reset
 - Fixed Checko validation for candidates without INN on list page.
 - Added real Checko profile URL validation.
 - Fixed Telegram preview MESSAGE_TOO_LONG

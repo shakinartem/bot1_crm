@@ -26,6 +26,25 @@ Current MVP discovery defaults:
 - `Camoufox` is optional and lazy-loaded through `BROWSER_BACKEND=camoufox`.
 - Smoke scripts stay offline by using fixtures and mock backends.
 
+## Lead Quality Backend First Pass
+
+This backend pass adds the first post-import qualification layer without changing the core rule:
+
+- Checko discovery still imports all valid new companies for the chosen OKVED.
+- Lead fit runs only after import and never filters import candidates.
+- Official website resolution now uses a denylist, URL normalization, and alive checks before saving to `Company.website`.
+- Detailed website research and lead-fit payloads are saved into `CompanyInsightSnapshot` with insight types `website_research` and `lead_fit`.
+- Fast CRM filters use nullable `Company` fields: `lead_fit_score`, `lead_fit_group`, `lead_fit_calculated_at`, `deleted_at`, and `deleted_by_user_id`.
+- Soft delete hides companies from normal CRM lists without destructive removal.
+- A backend 7-touch workflow can create the default sequence of follow-up tasks through API.
+- Dev database reset is guarded by both `ADMIN_IDS` and `ALLOW_DB_RESET=true`.
+
+Additional env for this pass:
+
+- `ALLOW_DB_RESET=false`
+- `YANDEX_SEARCH_TIMEOUT=15`
+- `YANDEX_SEARCH_LIMIT=10`
+
 ## Setup
 
 ```bash

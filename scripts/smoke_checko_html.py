@@ -103,6 +103,10 @@ def build_profile_html(*, legal_name: str, short_name: str, inn: str, ogrn: str,
 
 
 async def main() -> None:
+    smoke_db = ROOT / "app_checko_smoke.db"
+    if smoke_db.exists():
+        smoke_db.unlink()
+
     profile = parse_checko_profile_page(PROFILE_FIXTURE.read_text(encoding="utf-8"))
     assert profile.short_name == 'ООО "ЦЕНТР СЕМЕЙНОЙ СТОМАТОЛОГИИ"'
     assert profile.legal_name and "ОБЩЕСТВО С ОГРАНИЧЕННОЙ ОТВЕТСТВЕННОСТЬЮ" in profile.legal_name
@@ -245,6 +249,7 @@ async def main() -> None:
 
     assert big_preview.total_found == 25
     assert big_preview.new_count == 25, f"expected new=25 on empty CRM, got {big_preview.new_count}"
+    assert big_preview.new_count == big_preview.total_found, "Checko preview must keep all valid new companies before lead-fit prioritization"
     assert big_preview.duplicate_count == 0, f"expected duplicates=0 on empty CRM, got {big_preview.duplicate_count}"
     assert big_preview.active_count == 25
     assert all(item.company.status == "active" for item in big_preview.items)

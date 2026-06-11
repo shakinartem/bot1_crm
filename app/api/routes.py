@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.admin_reset.service import reset_database
 from app.config import get_settings
 from app.database import async_session_factory, get_session
 from app.modules.analytics.schemas import (
@@ -87,6 +89,13 @@ from app.modules.legal_discovery.schemas import (
 )
 from app.modules.legal_discovery.okved_catalog import list_popular_okved
 from app.modules.legal_discovery.service import import_legal_discovery_preview, run_legal_discovery_preview
+from app.modules.lead_fit.schemas import LeadFitGroupSummary, LeadFitScore
+from app.modules.lead_fit.service import (
+    get_company_lead_fit,
+    list_companies_by_lead_fit_group,
+    recalculate_company_lead_fit,
+    summarize_lead_fit_groups,
+)
 from app.modules.proposals.keyboards import package_catalog_payload
 from app.modules.proposals.schemas import (
     ContractActionRequest,
@@ -109,6 +118,7 @@ from app.modules.proposals.service import (
 )
 from app.modules.research.schemas import ResearchResultRead, ResearchRunRequest
 from app.modules.research.service import get_latest_research, get_research_history, run_company_research
+from app.modules.research.website_resolver import WebsiteSearchOutcome, run_website_search_for_company
 from app.modules.research_queue.schemas import (
     ResearchBatchRunRequest,
     ResearchJobCreateRequest,
@@ -138,6 +148,7 @@ from app.modules.sales_intelligence.service import (
     generate_soprano_questions,
     get_latest_sales_intelligence,
 )
+from app.modules.crm.touch_service import create_touch_plan_for_company, get_touch_plan_for_company
 from app.modules.users import service as users_service
 from app.modules.users.schemas import AssignmentResult, CRMUserRead, CRMUserUpdate, CompanyAssignRequest
 
@@ -153,6 +164,19 @@ api_router = APIRouter(prefix="/api")
 bot2_router = APIRouter(prefix="/api/bot2")
 
 
+class WebsiteResearchRequest(BaseModel):
+    force: bool = False
+
+
+class TouchPlanCreateRequest(BaseModel):
+    assigned_user_id: int | None = None
+
+
+class AdminResetRequest(BaseModel):
+    confirmation: str
+    full_reset: bool = False
+
+
 async def require_bot2_auth(authorization: str | None = Header(default=None)) -> None:
     settings = get_settings()
     if not settings.bot2_api_token:
@@ -163,6 +187,19 @@ async def require_bot2_auth(authorization: str | None = Header(default=None)) ->
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid BOT2 API token. Use header: Authorization: Bearer <BOT2_API_KEY>",
         )
+
+
+async def require_admin_api_auth(authorization: str | None = Header(default=None)) -> None:
+    settings = get_settings()
+    if not settings.allow_db_reset:
+        raise HTTPException(status_code=403, detail="ALLOW_DB_RESET=false")
+    if not settings.admin_id_list:
+        raise HTTPException(status_code=403, detail="ADMIN_IDS is empty")
+    if not settings.bot2_api_token:
+        return
+    expected = f"Bearer {settings.bot2_api_token}"
+    if authorization != expected:
+        raise HTTPException(status_code=401, detail="Invalid admin token")
 
 
 @api_router.get("/health")
@@ -295,6 +332,29 @@ async def create_company(
     session: AsyncSession = Depends(get_session),
 ):
     return await crm_service.create_company(session, payload)
+
+
+@api_router.post("/companies/{company_id}/research/website", response_model=WebsiteSearchOutcome)
+async def company_website_research(
+    company_id: int,
+    payload: WebsiteResearchRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await run_website_search_for_company(session, company_id, force=payload.force)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@api_router.get("/companies/{company_id}/research/website/latest", response_model=CompanyInsightSnapshotRead)
+async def company_website_research_latest(
+    company_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    snapshot = await get_latest_company_insight(session, company_id, "website_research")
+    if not snapshot:
+        raise HTTPException(status_code=404, detail="Website research snapshot not found")
+    return serialize_company_insight_snapshot(snapshot)
 
 
 @api_router.get("/companies/export")
@@ -700,6 +760,43 @@ async def get_company(
     return company
 
 
+@api_router.get("/companies/{company_id}/lead-fit", response_model=LeadFitScore)
+async def company_lead_fit(
+    company_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    result = await get_company_lead_fit(session, company_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Lead fit not found")
+    return result
+
+
+@api_router.post("/companies/{company_id}/lead-fit/recalculate", response_model=LeadFitScore)
+async def company_lead_fit_recalculate(
+    company_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await recalculate_company_lead_fit(session, company_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@api_router.get("/lead-fit/groups", response_model=LeadFitGroupSummary)
+async def lead_fit_groups(
+    session: AsyncSession = Depends(get_session),
+):
+    return await summarize_lead_fit_groups(session)
+
+
+@api_router.get("/lead-fit/groups/{group}/companies", response_model=list[CompanyRead])
+async def lead_fit_group_companies(
+    group: str,
+    session: AsyncSession = Depends(get_session),
+):
+    return await list_companies_by_lead_fit_group(session, group)
+
+
 @api_router.get("/companies/{company_id}/score", response_model=LeadScoreRead)
 async def company_score(
     company_id: int,
@@ -946,6 +1043,26 @@ async def delete_company(
         raise HTTPException(status_code=404, detail="Company not found")
 
 
+@api_router.post("/companies/{company_id}/touch-plan", response_model=list[FollowUpTaskRead])
+async def company_touch_plan_create(
+    company_id: int,
+    payload: TouchPlanCreateRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await create_touch_plan_for_company(session, company_id, assigned_user_id=payload.assigned_user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@api_router.get("/companies/{company_id}/touch-plan", response_model=list[FollowUpTaskRead])
+async def company_touch_plan_get(
+    company_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    return await get_touch_plan_for_company(session, company_id)
+
+
 @api_router.get("/companies/{company_id}/interactions", response_model=list[InteractionRead])
 async def list_interactions(
     company_id: int,
@@ -1086,6 +1203,22 @@ async def ai_call_prep(
     if not result:
         raise HTTPException(status_code=404, detail="Company not found")
     return {"company_id": company_id, "call_prep": result}
+
+
+@api_router.post(
+    "/admin/reset-database",
+    dependencies=[Depends(require_admin_api_auth)],
+)
+async def admin_reset_database(
+    payload: AdminResetRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    if payload.confirmation != "RESET DATABASE":
+        raise HTTPException(status_code=400, detail="Invalid confirmation phrase")
+    try:
+        return await reset_database(session, full_reset=payload.full_reset)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
 
 
 @bot2_router.get(

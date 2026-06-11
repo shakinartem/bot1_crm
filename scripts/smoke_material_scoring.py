@@ -41,6 +41,7 @@ def main() -> None:
             "rating": None,
             "contact_consistency": True,
             "has_photos": False,
+            "has_description": True,
         },
         "trust": {
             "has_decision_maker": True,
@@ -60,11 +61,11 @@ def main() -> None:
     score = calculate_material_quality_score(company_context)
     assert score.website_score == 60
     assert score.socials_score == 25
-    assert score.maps_score == 50
+    assert score.maps_score == 67
     assert score.trust_score == 62
     assert score.conversion_score == 43
     assert score.contact_score == 86
-    assert score.total_score == 56
+    assert score.total_score == 58
     assert score.grade == "normal"
 
     sparse_score = calculate_material_quality_score(
@@ -90,8 +91,8 @@ def main() -> None:
     )
     assert sparse_score.website_score >= 0
     assert sparse_score.total_score >= 0
-    assert any("missing required top-level sections" in item.lower() for item in sparse_score.risks)
-    assert any("could not be parsed" in item.lower() for item in sparse_score.risks)
+    assert any("отсутствуют обязательные разделы" in item.lower() for item in sparse_score.risks)
+    assert any("не удалось разобрать" in item.lower() for item in sparse_score.risks)
     assert any("'socials'" in item.lower() for item in sparse_score.next_improvements)
     print("smoke_material_scoring ok")
 

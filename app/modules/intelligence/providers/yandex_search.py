@@ -15,6 +15,7 @@ class YandexSearchProvider(WebSearchProvider):
         settings = get_settings()
         self._api_key = settings.yandex_search_api_key
         self._folder_id = settings.yandex_search_folder_id
+        self._timeout = settings.yandex_search_timeout
         self.enabled = bool(self._api_key and self._folder_id)
 
     async def search(
@@ -32,7 +33,7 @@ class YandexSearchProvider(WebSearchProvider):
             "lr": 213,
         }
         try:
-            async with httpx.AsyncClient(timeout=get_settings().intelligence_request_timeout) as client:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
                 response = await client.get("https://yandex.ru/search/xml", params=params)
                 response.raise_for_status()
                 payload = response.json()

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Added website denylist and website health checks.
+- Added Yandex website search foundation by INN/OGRN/name+city.
+- Improved Russian phone normalization and extraction.
+- Added post-import lead fit scoring and group persistence.
+- Added lead fit API endpoints and group list endpoints.
+- Added 7-touch backend workflow and touch-plan API endpoints.
+- Added company soft delete fields and delete endpoint behavior.
+- Added guarded dev database reset endpoint and service.
+- Added smoke scripts for phone parsing, website resolver, touch plan, company delete, admin reset, and lead fit.
 - Fixed Checko validation for candidates without INN on list page.
 - Added real Checko profile URL validation.
 - Removed unstable Checko region UI automation.
