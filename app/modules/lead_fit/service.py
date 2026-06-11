@@ -49,6 +49,14 @@ async def recalculate_companies_lead_fit(session: AsyncSession, company_ids: lis
     return scores
 
 
+async def recalculate_all_companies_lead_fit(session: AsyncSession) -> list[LeadFitScore]:
+    result = await session.execute(
+        select(Company.id).where(Company.deleted_at.is_(None)).order_by(Company.id.asc())
+    )
+    company_ids = [company_id for company_id in result.scalars().all()]
+    return await recalculate_companies_lead_fit(session, company_ids)
+
+
 async def get_company_lead_fit(session: AsyncSession, company_id: int) -> LeadFitScore | None:
     snapshot = await get_latest_company_insight(session, company_id, "lead_fit")
     payload = safe_load_payload(snapshot)

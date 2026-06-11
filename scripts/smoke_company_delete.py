@@ -16,6 +16,7 @@ os.environ.setdefault("BOT2_API_TOKEN", "")
 from app.database import async_session_factory, create_db_schema  # noqa: E402
 from app.modules.crm.schemas import CompanyCreate  # noqa: E402
 from app.modules.crm.service import create_company, delete_company, list_companies  # noqa: E402
+from app.modules.crm.telegram_ux import render_delete_confirmation  # noqa: E402
 
 
 async def main() -> None:
@@ -25,6 +26,8 @@ async def main() -> None:
     await create_db_schema()
     async with async_session_factory() as session:
         company = await create_company(session, CompanyCreate(name="Delete Clinic"))
+        confirmation = render_delete_confirmation(company)
+        assert "скрыта" in confirmation.lower()
         assert len(await list_companies(session, limit=20)) == 1
         assert await delete_company(session, company.id)
         assert len(await list_companies(session, limit=20)) == 0

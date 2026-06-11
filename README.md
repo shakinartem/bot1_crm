@@ -45,6 +45,19 @@ Additional env for this pass:
 - `YANDEX_SEARCH_TIMEOUT=15`
 - `YANDEX_SEARCH_LIMIT=10`
 
+## Telegram UX Second Pass
+
+Telegram CRM now also includes a manager-friendly UX layer for the new lead-quality backend:
+
+- `🏷 Группы лидов` with A/B/C/D/Excluded counts and paged company lists
+- lead-fit block inside the company card with reasons and recommended next action
+- `📅 План 7 касаний` in the company card, plus touch-plan create/open/complete flows
+- `📅 Мои касания` for overdue and today follow-up tasks assigned to the current CRM user
+- Telegram soft delete confirmation from the company card
+- admin-only DEV reset flow guarded by both `ADMIN_IDS` and `ALLOW_DB_RESET=true`
+- `🧠 Website research` and `🔄 Рассчитать приоритет` actions directly from the company card
+- render-safe Telegram text output capped to 3500 characters for the new screens
+
 ## Setup
 
 ```bash

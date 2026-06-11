@@ -22,6 +22,8 @@ from app.modules.analytics.schemas import (
 from app.modules.analytics.scoring import calculate_lead_score
 from app.modules.crm.constants import CompanyStatus, TaskStatus
 from app.modules.crm.models import Company, FollowUpTask, LeadInteraction
+from app.modules.crm.telegram_ux import render_lead_fit_block, render_touch_plan_block
+from app.modules.lead_fit.rules import calculate_lead_fit
 
 
 STATUS_ORDER = [
@@ -296,6 +298,16 @@ def format_company_card_with_score(company: Company) -> str:
     from app.modules.crm.service import format_company_card
 
     score = build_company_lead_score(company)
+    lead_fit = None
+    if company.lead_fit_calculated_at:
+        lead_fit = calculate_lead_fit(company)
+        lead_fit.calculated_at = company.lead_fit_calculated_at
+        if company.lead_fit_score is not None:
+            lead_fit.total_score = company.lead_fit_score
+    touch_tasks = sorted(
+        [task for task in company.tasks if task.interaction_stage],
+        key=lambda item: (item.due_at is None, item.due_at or datetime.max, item.id),
+    )
     research_text = _format_research_summary(company)
     has_sales_materials = bool(
         company.website
@@ -307,6 +319,10 @@ def format_company_card_with_score(company: Company) -> str:
     )
     lines = [
         format_company_card(company),
+        "",
+        render_lead_fit_block(lead_fit),
+        "",
+        render_touch_plan_block(touch_tasks),
         "",
         research_text,
         "",

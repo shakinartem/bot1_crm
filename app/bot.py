@@ -9,6 +9,7 @@ from app.modules.analytics.handlers import router as analytics_router
 from app.modules.ai.handlers import router as ai_router
 from app.modules.calls.handlers import router as calls_router
 from app.modules.crm.handlers import router as crm_router
+from app.modules.crm.telegram_lead_ux_handlers import router as crm_telegram_lead_ux_router
 from app.modules.digest.handlers import router as digest_router
 from app.modules.digest.scheduler import DigestScheduler
 from app.modules.enrichment.handlers import router as enrichment_router
@@ -34,6 +35,7 @@ async def main() -> None:
 
     bot = Bot(token=settings.bot_token)
     dp = Dispatcher()
+    dp.include_router(crm_telegram_lead_ux_router)
     dp.include_router(crm_router)
     dp.include_router(legal_discovery_router)
     dp.include_router(enrichment_router)

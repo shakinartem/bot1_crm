@@ -42,3 +42,7 @@ class TaskStates(StatesGroup):
     title = State()
     description = State()
     due_at = State()
+
+
+class AdminResetStates(StatesGroup):
+    confirmation = State()

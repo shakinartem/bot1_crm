@@ -11,6 +11,11 @@
 - Added company soft delete fields and delete endpoint behavior.
 - Added guarded dev database reset endpoint and service.
 - Added smoke scripts for phone parsing, website resolver, touch plan, company delete, admin reset, and lead fit.
+- Added Telegram UX for lead prioritization groups.
+- Added Telegram 7-touch workflow.
+- Added Telegram company soft delete.
+- Added admin-only DEV reset flow.
+- Added website research action from company card.
 - Fixed Checko validation for candidates without INN on list page.
 - Added real Checko profile URL validation.
 - Removed unstable Checko region UI automation.

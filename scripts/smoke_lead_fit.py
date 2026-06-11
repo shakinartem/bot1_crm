@@ -16,6 +16,7 @@ os.environ.setdefault("BOT2_API_TOKEN", "")
 from app.database import async_session_factory, create_db_schema  # noqa: E402
 from app.modules.crm.schemas import CompanyCreate  # noqa: E402
 from app.modules.crm.service import create_company  # noqa: E402
+from app.modules.crm.telegram_ux import render_lead_fit_block  # noqa: E402
 from app.modules.lead_fit.service import get_company_lead_fit, recalculate_company_lead_fit, summarize_lead_fit_groups  # noqa: E402
 
 
@@ -47,6 +48,9 @@ async def main() -> None:
         assert cold_score.group in {"D_low_priority", "excluded_do_not_contact"}
         latest = await get_company_lead_fit(session, hot.id)
         assert latest is not None and latest.total_score == hot_score.total_score
+        rendered = render_lead_fit_block(latest)
+        assert "Приоритет:" in rendered
+        assert "Следующий шаг:" in rendered
         summary = await summarize_lead_fit_groups(session)
         assert summary.total == 2
     print("smoke_lead_fit ok")

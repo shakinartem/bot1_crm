@@ -26,10 +26,11 @@ CALL_RESULT_OPTIONS = [
 
 def main_menu() -> ReplyKeyboardMarkup:
     rows = [
-        [KeyboardButton(text="🔍 Поиск и импорт"), KeyboardButton(text="🏢 CRM / Компании")],
+        [KeyboardButton(text="🔌 Поиск и импорт"), KeyboardButton(text="🏢 CRM / Компании")],
         [KeyboardButton(text="👤 Мои лиды"), KeyboardButton(text="📞 Продажи")],
+        [KeyboardButton(text="🏷 Группы лидов"), KeyboardButton(text="📅 Мои касания")],
         [KeyboardButton(text="📄 КП и документы"), KeyboardButton(text="🧠 AI / Research")],
-        [KeyboardButton(text="📊 Аналитика"), KeyboardButton(text="⚙️ Настройки")],
+        [KeyboardButton(text="📊 Аналитика"), KeyboardButton(text="⚙️ Настройки / Admin")],
         [KeyboardButton(text="🔌 Поиск компаний")],
     ]
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
@@ -70,6 +71,8 @@ def crm_section_menu_markup() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="📋 Список компаний", callback_data="menu:crm:list")],
+            [InlineKeyboardButton(text="🏷 Группы лидов", callback_data="menu:crm:lead_groups")],
+            [InlineKeyboardButton(text="📅 Мои касания", callback_data="menu:crm:my_touches")],
             [InlineKeyboardButton(text="🗺 Города и регионы", callback_data="menu:crm:regions")],
             [InlineKeyboardButton(text="🏙 Компании по городу", callback_data="menu:crm:cities")],
             [InlineKeyboardButton(text="➕ Добавить компанию", callback_data="menu:crm:add")],
@@ -82,7 +85,8 @@ def crm_section_menu_markup() -> InlineKeyboardMarkup:
 def leads_section_menu_markup() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📌 Мои задачи на сегодня", callback_data="menu:leads:today")],
+            [InlineKeyboardButton(text="📊 Мои задачи на сегодня", callback_data="menu:leads:today")],
+            [InlineKeyboardButton(text="📅 Мои касания", callback_data="menu:crm:my_touches")],
             [InlineKeyboardButton(text="📋 Последние компании", callback_data="menu:leads:companies")],
             [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu:main")],
         ]
@@ -119,11 +123,24 @@ def ai_research_section_menu_markup() -> InlineKeyboardMarkup:
     )
 
 
-def settings_section_menu_markup() -> InlineKeyboardMarkup:
+def settings_section_menu_markup(include_admin_reset: bool = False) -> InlineKeyboardMarkup:
+    rows = [[InlineKeyboardButton(text="ℹ️ О разделе", callback_data="menu:settings:about")]]
+    if include_admin_reset:
+        rows.append([InlineKeyboardButton(text="🧹 Очистить базу DEV", callback_data="admin:reset:start")])
+    rows.append([InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu:main")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def lead_groups_markup() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="ℹ️ О разделе", callback_data="menu:settings:about")],
-            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu:main")],
+            [InlineKeyboardButton(text="🔥 Горячие", callback_data="leadfit:group:A_hot_priority:0")],
+            [InlineKeyboardButton(text="🟡 Перспективные", callback_data="leadfit:group:B_warm_potential:0")],
+            [InlineKeyboardButton(text="⚪ Нейтральные", callback_data="leadfit:group:C_neutral_database:0")],
+            [InlineKeyboardButton(text="🔻 Низкий приоритет", callback_data="leadfit:group:D_low_priority:0")],
+            [InlineKeyboardButton(text="🚫 Исключённые", callback_data="leadfit:group:excluded_do_not_contact:0")],
+            [InlineKeyboardButton(text="🔄 Пересчитать группы", callback_data="leadfit:recalculate_all")],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="menu:crm:list")],
         ]
     )
 
@@ -131,6 +148,14 @@ def settings_section_menu_markup() -> InlineKeyboardMarkup:
 def company_actions(company_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🔄 Рассчитать приоритет", callback_data=f"leadfit:recalculate:{company_id}"),
+                InlineKeyboardButton(text="🧠 Website research", callback_data=f"leadfit:website:{company_id}"),
+            ],
+            [
+                InlineKeyboardButton(text="📅 План 7 касаний", callback_data=f"touch:open:{company_id}"),
+                InlineKeyboardButton(text="🗑 Удалить компанию", callback_data=f"company:delete:{company_id}"),
+            ],
             [
                 InlineKeyboardButton(text="📞 Добавить звонок", callback_data=f"company:call:{company_id}"),
                 InlineKeyboardButton(text="🧾 Добавить заметку", callback_data=f"company:note:{company_id}"),
@@ -145,7 +170,7 @@ def company_actions(company_id: int) -> InlineKeyboardMarkup:
             ],
             [InlineKeyboardButton(text="👤 Назначить на себя", callback_data=f"company:assignme:{company_id}")],
             [
-                InlineKeyboardButton(text="📜 История", callback_data=f"company:history:{company_id}:0"),
+                InlineKeyboardButton(text="📝 История", callback_data=f"company:history:{company_id}:0"),
                 InlineKeyboardButton(text="🤖 AI-подготовка", callback_data=f"company:ai:{company_id}"),
             ],
             [
@@ -168,6 +193,17 @@ def company_list_markup(companies: list[Any]) -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text=f"#{company.id} {company.name[:28]}", callback_data=f"company:open:{company.id}")]
         for company in companies
     ]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def lead_group_companies_markup(companies: list[Any], group: str, page: int, has_next_page: bool) -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton(text=f"#{company.id} {company.name[:28]}", callback_data=f"company:open:{company.id}")]
+        for company in companies
+    ]
+    if has_next_page:
+        rows.append([InlineKeyboardButton(text="➡️ Следующая страница", callback_data=f"leadfit:group:{group}:{page + 1}")])
+    rows.append([InlineKeyboardButton(text="⬅️ К группам", callback_data="menu:crm:lead_groups")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -229,7 +265,7 @@ def follow_up_task_prompt_markup(company_id: int) -> InlineKeyboardMarkup:
     )
 
 
-def today_tasks_markup(tasks: list[Any]) -> InlineKeyboardMarkup | None:
+def today_tasks_markup(tasks: list[Any], *, back_callback: str = "menu:leads:today") -> InlineKeyboardMarkup | None:
     rows: list[list[InlineKeyboardButton]] = []
     for task in tasks:
         rows.append(
@@ -239,6 +275,8 @@ def today_tasks_markup(tasks: list[Any]) -> InlineKeyboardMarkup | None:
                 InlineKeyboardButton(text="Перенести", callback_data=f"task:shift:{task.id}"),
             ]
         )
+    if rows:
+        rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data=back_callback)])
     return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
 
 
@@ -254,6 +292,35 @@ def stats_tasks_markup(tasks: list[Any]) -> InlineKeyboardMarkup:
         )
     rows.append([InlineKeyboardButton(text="⬅️ К статистике", callback_data="stats:menu")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def touch_plan_markup(company_id: int, *, has_plan: bool, current_task_id: int | None = None) -> InlineKeyboardMarkup:
+    if not has_plan:
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="Создать план 7 касаний", callback_data=f"touch:create:{company_id}")],
+                [InlineKeyboardButton(text="⬅️ Назад", callback_data=f"company:open:{company_id}")],
+            ]
+        )
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Отметить касание выполненным", callback_data=f"touch:done:{current_task_id or 0}")],
+            [InlineKeyboardButton(text="➕ Записать касание", callback_data=f"touch:note:{company_id}")],
+            [InlineKeyboardButton(text="▶️ Следующее касание", callback_data=f"touch:open:{company_id}")],
+            [InlineKeyboardButton(text="📅 Открытые задачи", callback_data=f"touch:tasks:{company_id}")],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data=f"company:open:{company_id}")],
+        ]
+    )
+
+
+def company_delete_confirm_markup(company_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Да, удалить", callback_data=f"company:delete:confirm:{company_id}")],
+            [InlineKeyboardButton(text="Отмена", callback_data=f"company:open:{company_id}")],
+        ]
+    )
 
 
 def stats_markup() -> InlineKeyboardMarkup:

@@ -16,6 +16,7 @@ os.environ.setdefault("BOT2_API_TOKEN", "")
 from app.database import async_session_factory, create_db_schema  # noqa: E402
 from app.modules.crm.schemas import CompanyCreate  # noqa: E402
 from app.modules.crm.service import create_company  # noqa: E402
+from app.modules.crm.telegram_ux import render_touch_plan_block  # noqa: E402
 from app.modules.crm.touch_service import create_touch_plan_for_company, get_touch_plan_for_company  # noqa: E402
 
 
@@ -31,6 +32,9 @@ async def main() -> None:
         assert tasks[0].interaction_stage == "touch_1_first_contact"
         second_read = await get_touch_plan_for_company(session, company.id)
         assert len(second_read) == 7
+        rendered = render_touch_plan_block(second_read)
+        assert "План 7 касаний" in rendered
+        assert "Текущее касание" in rendered
     print("smoke_touch_plan ok")
 
 

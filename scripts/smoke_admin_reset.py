@@ -21,6 +21,7 @@ from app.modules.admin_reset.service import reset_database  # noqa: E402
 from app.modules.crm.models import Company  # noqa: E402
 from app.modules.crm.schemas import CompanyCreate  # noqa: E402
 from app.modules.crm.service import create_company  # noqa: E402
+from app.modules.crm.telegram_ux import render_admin_reset_disabled, render_admin_reset_prompt, render_admin_reset_result  # noqa: E402
 
 
 async def main() -> None:
@@ -30,10 +31,14 @@ async def main() -> None:
     await create_db_schema()
     async with async_session_factory() as session:
         await create_company(session, CompanyCreate(name="Reset Clinic"))
+        prompt = render_admin_reset_prompt()
+        assert "RESET DATABASE" in prompt
+        assert "ALLOW_DB_RESET=true" in render_admin_reset_disabled()
         before = await session.execute(select(Company))
         assert len(before.scalars().all()) == 1
         result = await reset_database(session, full_reset=False)
         assert result["companies"] == 1
+        assert "companies 1" in render_admin_reset_result(result)
         after = await session.execute(select(Company))
         assert len(after.scalars().all()) == 0
     print("smoke_admin_reset ok")

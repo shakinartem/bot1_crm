@@ -1,4 +1,5 @@
 import json
+from html import escape
 from hashlib import sha1
 
 from aiogram import F, Router

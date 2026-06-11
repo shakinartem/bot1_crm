@@ -25,6 +25,13 @@
 - Improved phone parser
 - Post-import lead fit scoring
 - Lead fit groups A/B/C/D/Excluded
+- Added Telegram lead groups
+- Added company card lead fit block
+- Added Telegram touch-plan workflow
+- Added my touches screen
+- Added Telegram soft delete
+- Added Telegram admin reset
+- Added Telegram website research action
 - 7 touches backend workflow
 - Company soft delete
 - Dev database reset
