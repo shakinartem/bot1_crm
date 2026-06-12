@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from uuid import uuid4
+from datetime import datetime, timezone
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +12,7 @@ from app.modules.crm.location_utils import extract_region_city_from_address
 from app.modules.crm.models import Company, ContactPoint, DecisionMaker, LeadInteraction
 from app.modules.enrichment.schemas import dump_json_text
 from app.modules.intelligence.models import IntelligenceSnapshot
+from app.modules.legal_discovery.models import LegalDiscoveryCursor
 from app.modules.lead_fit.service import recalculate_companies_lead_fit
 from app.modules.legal_discovery.providers import get_legal_discovery_provider
 from app.modules.legal_discovery.schemas import (
@@ -37,6 +39,7 @@ async def run_legal_discovery_preview(
     city: str | None = None,
     region: str | None = None,
     limit: int | None = None,
+    page: int = 1,
     only_main_okved: bool = True,
     only_active: bool = True,
     include_profiles: bool = True,
@@ -57,6 +60,7 @@ async def run_legal_discovery_preview(
             city=city,
             region=region,
             limit=search_limit,
+            page=page,
             only_main_okved=only_main_okved,
             only_active=only_active,
             include_profiles=include_profiles,
@@ -68,6 +72,17 @@ async def run_legal_discovery_preview(
         raise BrowserBackendError(str(exc), status_code=503) from exc
 
     debug_info = dict(getattr(provider, "last_debug_info", {}) or {})
+    query_hash = build_discovery_query_hash(
+        provider.code,
+        query=query,
+        okved_code=okved_code,
+        city=city,
+        region=region,
+        only_main_okved=only_main_okved,
+        only_active=only_active,
+        limit=search_limit,
+        include_profiles=include_profiles,
+    )
     items = [await _build_preview_item(session, company) for company in companies]
     preview = LegalDiscoveryPreview(
         preview_id=str(uuid4()),
@@ -77,6 +92,9 @@ async def run_legal_discovery_preview(
         city=city,
         region=region,
         provider=provider.code,
+        current_page=page,
+        next_page=page + 1,
+        query_hash=query_hash,
         total_found=len(items),
         active_count=sum(1 for item in items if _company_status_kind(item.company) == "active"),
         inactive_count=sum(1 for item in items if _company_status_kind(item.company) == "inactive"),
@@ -117,6 +135,18 @@ async def run_legal_discovery_preview(
         debug_info=debug_info,
         items=items,
     )
+    cursor = await upsert_discovery_cursor(
+        session,
+        provider=provider.code,
+        okved_code=okved_code or "manual",
+        query_hash=query_hash,
+        niche_label=okved_title or query,
+        current_page=page,
+        preview=preview,
+    )
+    preview.debug_info["cursor_id"] = cursor.id
+    preview.debug_info["cursor_current_page"] = cursor.current_page
+    preview.debug_info["cursor_next_page"] = cursor.current_page + 1
     _PREVIEW_REGISTRY[preview.preview_id] = preview
     return preview
 
@@ -183,6 +213,7 @@ async def import_legal_discovery_preview(
             result.errors.append(str(exc))
 
     await session.commit()
+    await update_discovery_cursor_after_import(session, preview, result)
     if result.added_company_ids:
         try:
             await recalculate_companies_lead_fit(session, result.added_company_ids)
@@ -198,6 +229,142 @@ async def import_legal_discovery_preview(
 
 def preview_callback_token(preview_id: str) -> str:
     return preview_id.split("-", 1)[0]
+
+
+def build_discovery_query_hash(
+    provider: str,
+    *,
+    query: str,
+    okved_code: str | None,
+    city: str | None,
+    region: str | None,
+    only_main_okved: bool,
+    only_active: bool,
+    limit: int,
+    include_profiles: bool,
+) -> str:
+    normalized = "|".join(
+        [
+            provider.strip().lower(),
+            (query or "").strip().lower(),
+            (okved_code or "").strip(),
+            (city or "").strip().lower(),
+            (region or "").strip().lower(),
+            "1" if only_main_okved else "0",
+            "1" if only_active else "0",
+            str(limit),
+            "1" if include_profiles else "0",
+        ]
+    )
+    return normalized
+
+
+async def upsert_discovery_cursor(
+    session: AsyncSession,
+    *,
+    provider: str,
+    okved_code: str,
+    query_hash: str,
+    niche_label: str | None,
+    current_page: int,
+    preview: LegalDiscoveryPreview | None = None,
+) -> LegalDiscoveryCursor:
+    result = await session.execute(
+        select(LegalDiscoveryCursor).where(
+            LegalDiscoveryCursor.provider == provider,
+            LegalDiscoveryCursor.okved_code == okved_code,
+            LegalDiscoveryCursor.query_hash == query_hash,
+        )
+    )
+    cursor = result.scalar_one_or_none()
+    if cursor is None:
+        cursor = LegalDiscoveryCursor(
+            provider=provider,
+            okved_code=okved_code,
+            niche_label=niche_label,
+            query_hash=query_hash,
+            current_page=current_page,
+        )
+        session.add(cursor)
+        await session.flush()
+    else:
+        cursor.niche_label = niche_label
+        cursor.current_page = current_page
+    if preview is not None:
+        cursor.previewed_count += preview.total_found
+        cursor.duplicate_count += preview.duplicate_count
+        if preview.items:
+            last_item = preview.items[-1].company
+            cursor.last_profile_url = last_item.checko_profile_url
+            cursor.last_inn = last_item.inn
+            cursor.last_ogrn = last_item.ogrn
+    await session.commit()
+    await session.refresh(cursor)
+    return cursor
+
+
+async def update_discovery_cursor_after_import(
+    session: AsyncSession,
+    preview: LegalDiscoveryPreview,
+    result: LegalDiscoveryImportResult,
+) -> None:
+    if not preview.query_hash:
+        return
+    cursor = await _get_discovery_cursor(
+        session,
+        provider=preview.provider,
+        okved_code=preview.okved_code or "manual",
+        query_hash=preview.query_hash,
+    )
+    if not cursor:
+        return
+    cursor.imported_count += result.added_count
+    if preview.items:
+        last_item = preview.items[-1].company
+        cursor.last_profile_url = last_item.checko_profile_url
+        cursor.last_inn = last_item.inn
+        cursor.last_ogrn = last_item.ogrn
+    await session.commit()
+
+
+async def reset_discovery_cursor(
+    session: AsyncSession,
+    *,
+    provider: str,
+    okved_code: str,
+    query_hash: str,
+) -> LegalDiscoveryCursor | None:
+    cursor = await _get_discovery_cursor(session, provider=provider, okved_code=okved_code, query_hash=query_hash)
+    if not cursor:
+        return None
+    cursor.current_page = 1
+    cursor.previewed_count = 0
+    cursor.imported_count = 0
+    cursor.duplicate_count = 0
+    cursor.last_profile_url = None
+    cursor.last_inn = None
+    cursor.last_ogrn = None
+    cursor.reset_at = datetime.now(timezone.utc)
+    await session.commit()
+    await session.refresh(cursor)
+    return cursor
+
+
+async def _get_discovery_cursor(
+    session: AsyncSession,
+    *,
+    provider: str,
+    okved_code: str,
+    query_hash: str,
+) -> LegalDiscoveryCursor | None:
+    result = await session.execute(
+        select(LegalDiscoveryCursor).where(
+            LegalDiscoveryCursor.provider == provider,
+            LegalDiscoveryCursor.okved_code == okved_code,
+            LegalDiscoveryCursor.query_hash == query_hash,
+        )
+    )
+    return result.scalar_one_or_none()
 
 
 def _resolve_preview(preview_ref: str) -> LegalDiscoveryPreview | None:

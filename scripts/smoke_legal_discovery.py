@@ -27,7 +27,7 @@ from app.modules.legal_discovery.handlers import (  # noqa: E402
     build_message_too_long_fallback_text,
     truncate_telegram_text,
 )
-from app.modules.legal_discovery.keyboards import discovery_preview_markup, discovery_zero_result_markup  # noqa: E402
+from app.modules.legal_discovery.keyboards import discovery_preview_markup, discovery_provider_markup, discovery_zero_result_markup  # noqa: E402
 from app.modules.legal_discovery.schemas import LegalDiscoveredCompany, LegalDiscoveryPreview, LegalDiscoveryPreviewItem  # noqa: E402
 from app.modules.legal_discovery.service import import_legal_discovery_preview, preview_callback_token, run_legal_discovery_preview  # noqa: E402
 
@@ -46,13 +46,15 @@ async def main() -> None:
             query="",
             okved_code="86.23",
             limit=25,
+            page=1,
             provider_code="mock",
         )
         assert preview.total_found == 25
+        assert preview.current_page == 1
+        assert preview.next_page == 2
         rendered = _render_preview(preview, compact=True)
         assert len(rendered) <= TELEGRAM_PREVIEW_LIMIT
         assert "Регион: не используется в Checko" in rendered
-        assert "Отфильтровано по региону" not in rendered
         assert "Первые 5 результатов" in rendered
 
         imported = await import_legal_discovery_preview(session, preview.preview_id, "active_new")
@@ -68,19 +70,25 @@ async def main() -> None:
     markup = discovery_zero_result_markup()
     labels = [button.text for row in markup.inline_keyboard for button in row]
     assert "Повторить без региона" not in labels
-    assert "Mock / Dev" in labels
+    assert "Mock / Dev" not in labels
+
+    provider_labels = [button.text for row in discovery_provider_markup().inline_keyboard for button in row]
+    assert "Mock / Dev" not in provider_labels
+    assert "🔍 Поиск компаний" in provider_labels
 
     preview_markup = discovery_preview_markup("12345678")
     preview_labels = [button.text for row in preview_markup.inline_keyboard for button in row]
     assert "Импортировать активные новые" in preview_labels
     assert "Импортировать все новые" in preview_labels
+    assert "➡️ Следующая пачка" in preview_labels
+    assert "🔄 Начать сначала" in preview_labels
 
     shortened = truncate_telegram_text("x" * (TELEGRAM_PREVIEW_LIMIT + 100))
     assert len(shortened) == TELEGRAM_PREVIEW_LIMIT
 
     fallback = build_message_too_long_fallback_text("x" * (TELEGRAM_PREVIEW_LIMIT + 500))
     assert len(fallback) <= TELEGRAM_PREVIEW_LIMIT
-    assert "Проверьте debug/CSV" in fallback
+    assert "debug/CSV" in fallback
 
     custom_preview = LegalDiscoveryPreview(
         preview_id="preview-test",

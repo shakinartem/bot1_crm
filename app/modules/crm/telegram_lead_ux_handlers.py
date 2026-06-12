@@ -38,6 +38,7 @@ from app.modules.crm.states import AdminResetStates, CompanyNoteStates
 from app.modules.crm.telegram_ux import (
     LIST_PREVIEW_LIMIT,
     TELEGRAM_TEXT_LIMIT,
+    build_system_status_snapshot,
     clamp_text,
     is_admin_telegram_id,
     render_admin_reset_disabled,
@@ -48,6 +49,8 @@ from app.modules.crm.telegram_ux import (
     render_lead_groups_menu,
     render_my_touches_today,
     render_open_tasks,
+    render_search_settings_text,
+    render_system_status_text,
     render_touch_plan_block,
     render_website_research_result,
 )
@@ -179,8 +182,28 @@ async def _show_touch_plan(message: Message, company_id: int, *, edit: bool = Fa
 async def _show_settings(message: Message, telegram_user_id: int | None, *, edit: bool = False) -> None:
     settings = get_settings()
     can_reset = is_admin_telegram_id(telegram_user_id) and settings.allow_db_reset
-    text = "⚙️ Настройки / Admin\n\nЗдесь собраны служебные настройки и DEV-инструменты."
+    text = "⚙️ Настройки\n\nЗдесь доступны состояние системы и read-only параметры поиска."
     markup = settings_section_menu_markup(include_admin_reset=can_reset)
+    if edit:
+        await _safe_edit_message(message, text, reply_markup=markup)
+        return
+    await message.answer(text, reply_markup=markup)
+
+
+async def _show_system_status(message: Message, *, edit: bool = False) -> None:
+    async with async_session_factory() as session:
+        snapshot = await build_system_status_snapshot(session)
+    text = render_system_status_text(snapshot)
+    markup = settings_section_menu_markup(include_admin_reset=is_admin_telegram_id(message.from_user.id if message.from_user else None) and get_settings().allow_db_reset)
+    if edit:
+        await _safe_edit_message(message, text, reply_markup=markup)
+        return
+    await message.answer(text, reply_markup=markup)
+
+
+async def _show_search_settings(message: Message, *, edit: bool = False) -> None:
+    text = render_search_settings_text()
+    markup = settings_section_menu_markup(include_admin_reset=is_admin_telegram_id(message.from_user.id if message.from_user else None) and get_settings().allow_db_reset)
     if edit:
         await _safe_edit_message(message, text, reply_markup=markup)
         return
@@ -205,7 +228,7 @@ async def my_touches_message(message: Message) -> None:
     await _show_my_touches(message, message)
 
 
-@router.message(F.text == "⚙️ Настройки / Admin")
+@router.message(F.text.in_({"⚙️ Настройки", "⚙️ Настройки / Admin"}))
 async def settings_message(message: Message) -> None:
     await _show_settings(message, message.from_user.id if message.from_user else None)
 
@@ -224,10 +247,17 @@ async def my_touches_callback(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
-@router.callback_query(F.data == "menu:settings:about")
+@router.callback_query(F.data.in_({"menu:settings:about", "menu:settings:system"}))
 async def settings_about_callback(callback: CallbackQuery) -> None:
     if callback.message:
-        await _show_settings(callback.message, callback.from_user.id if callback.from_user else None, edit=True)
+        await _show_system_status(callback.message, edit=True)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "menu:settings:search")
+async def settings_search_callback(callback: CallbackQuery) -> None:
+    if callback.message:
+        await _show_search_settings(callback.message, edit=True)
     await callback.answer()
 
 
@@ -396,7 +426,7 @@ async def company_delete_callback(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
-@router.callback_query(F.data == "admin:reset:start")
+@router.callback_query(F.data.in_({"admin:reset:crm:start", "admin:reset:all:start"}))
 async def admin_reset_start_callback(callback: CallbackQuery, state: FSMContext) -> None:
     if not callback.message:
         await callback.answer("Не удалось открыть reset.", show_alert=True)
@@ -409,16 +439,21 @@ async def admin_reset_start_callback(callback: CallbackQuery, state: FSMContext)
         await callback.message.answer(render_admin_reset_disabled())
         await callback.answer()
         return
+    mode = "all_data" if callback.data.endswith("all:start") else "crm_only"
     await state.clear()
+    await state.update_data(admin_reset_mode=mode)
     await state.set_state(AdminResetStates.confirmation)
-    await callback.message.answer(render_admin_reset_prompt(), reply_markup=flow_menu())
+    await callback.message.answer(render_admin_reset_prompt(mode), reply_markup=flow_menu())
     await callback.answer()
 
 
 @router.message(AdminResetStates.confirmation)
 async def admin_reset_confirmation_message(message: Message, state: FSMContext) -> None:
-    if (message.text or "").strip() != "RESET DATABASE":
-        await message.answer("Нужен точный текст RESET DATABASE.", reply_markup=flow_menu())
+    data = await state.get_data()
+    mode = data.get("admin_reset_mode", "crm_only")
+    expected_confirmation = "RESET ALL DATA" if mode == "all_data" else "RESET CRM"
+    if (message.text or "").strip() != expected_confirmation:
+        await message.answer(f"Нужен точный текст {expected_confirmation}.", reply_markup=flow_menu())
         return
     if not is_admin_telegram_id(message.from_user.id if message.from_user else None):
         await state.clear()
@@ -429,7 +464,7 @@ async def admin_reset_confirmation_message(message: Message, state: FSMContext) 
         await message.answer(render_admin_reset_disabled(), reply_markup=main_menu())
         return
     async with async_session_factory() as session:
-        result = await reset_database(session, full_reset=False)
+        result = await reset_database(session, mode=mode, keep_users=True, clear_debug_files=mode == "all_data")
     await state.clear()
     await message.answer(render_admin_reset_result(result), reply_markup=main_menu())
 

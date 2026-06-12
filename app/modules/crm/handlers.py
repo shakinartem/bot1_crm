@@ -81,7 +81,8 @@ from app.modules.crm.states import (
     TaskStates,
 )
 from app.modules.imports.states import ImportCsvStates
-from app.modules.legal_discovery.keyboards import discovery_provider_markup
+from app.modules.crm.telegram_ux import build_system_status_snapshot, render_search_settings_text, render_system_status_text
+from app.modules.legal_discovery.handlers import show_discovery_start
 from app.modules.users.service import assign_company_to_user, build_display_name
 from app.utils.telegram import get_current_crm_user
 
@@ -296,15 +297,11 @@ async def _show_stats(message: Message, *, edit: bool = False) -> None:
     await message.answer(text, reply_markup=markup)
 
 
-async def _show_search_import_section(message: Message, *, edit: bool = False) -> None:
-    text = (
-        "🔍 Поиск и импорт\n\n"
-        "Здесь собраны сценарии поиска компаний и загрузки базы.\n\n"
-        "Сейчас доступны:\n"
-        "• 🔍 Поиск компаний — existing legal discovery flow\n"
-        "• 📥 Импорт CSV\n"
-        "• 🔎 Поиск по CRM"
-    )
+async def _show_search_import_section(message: Message, *, edit: bool = False, state: FSMContext | None = None) -> None:
+    if state is not None:
+        await show_discovery_start(message, state)
+        return
+    text = "🔍 Поиск компаний\n\nЭтот путь ведёт в live discovery Checko."
     markup = search_import_menu_markup()
     if edit:
         await _safe_edit_message(message, text, reply_markup=markup)
@@ -379,11 +376,10 @@ async def _show_ai_research_section(message: Message, *, edit: bool = False) -> 
 
 
 async def _show_settings_section(message: Message, *, edit: bool = False) -> None:
-    text = (
-        "⚙️ Настройки\n\n"
-        "Раздел подготовлен. Функция будет добавлена в следующем этапе."
-    )
-    markup = settings_section_menu_markup()
+    async with async_session_factory() as session:
+        snapshot = await build_system_status_snapshot(session)
+    text = "\n\n".join([render_system_status_text(snapshot), render_search_settings_text()])
+    markup = settings_section_menu_markup(include_admin_reset=False)
     if edit:
         await _safe_edit_message(message, text, reply_markup=markup)
         return
@@ -532,8 +528,8 @@ async def menu(message: Message, state: FSMContext) -> None:
 
 
 @router.message(F.text == "🔍 Поиск и импорт")
-async def search_import_section(message: Message) -> None:
-    await _show_search_import_section(message)
+async def search_import_section(message: Message, state: FSMContext) -> None:
+    await _show_search_import_section(message, state=state)
 
 
 @router.message(F.text == "🏢 CRM / Компании")
@@ -757,12 +753,7 @@ async def menu_main_callback(callback: CallbackQuery, state: FSMContext) -> None
 async def menu_search_companies_callback(callback: CallbackQuery, state: FSMContext) -> None:
     if not callback.message:
         return
-    await state.clear()
-    await _safe_edit_message(
-        callback.message,
-        "🔍 Поиск компаний\n\nВыберите источник для existing legal discovery flow:",
-        reply_markup=discovery_provider_markup(),
-    )
+    await show_discovery_start(callback.message, state)
     await callback.answer()
 
 
@@ -1538,4 +1529,4 @@ async def stats_overdue_tasks_callback(callback: CallbackQuery) -> None:
 @router.message(F.text == "Настройки")
 @router.message(F.text == "⚙️ Настройки")
 async def settings_placeholder(message: Message) -> None:
-    await message.answer("Настройки CRM будут добавлены на следующем этапе. AI-настройки доступны отдельной командой.")
+    await _show_settings_section(message)

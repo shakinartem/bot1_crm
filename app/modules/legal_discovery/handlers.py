@@ -21,9 +21,11 @@ from app.modules.legal_discovery.keyboards import (
     discovery_zero_result_markup,
 )
 from app.modules.legal_discovery.service import (
+    build_discovery_query_hash,
     get_legal_discovery_preview,
     import_legal_discovery_preview,
     preview_callback_token,
+    reset_discovery_cursor,
     run_legal_discovery_preview,
 )
 from app.modules.research.browser_backend import BrowserBackendError
@@ -49,7 +51,7 @@ DISCOVERY_BROWSER_ERROR_RUNTIME_TEXT = (
     "Camoufox запустился, но не смог загрузить страницу. Попробуйте CAMOUFOX_HEADLESS=true и повторите попытку."
 )
 DISCOVERY_BROWSER_ERROR_PARSE_TEXT = (
-    "Не удалось корректно разобрать выдачу Checko. Попробуйте меньший лимит или Mock / Dev."
+    "Не удалось корректно разобрать выдачу Checko. Попробуйте меньший лимит или начните сначала."
 )
 
 
@@ -57,22 +59,33 @@ class DiscoveryStates(StatesGroup):
     niche_manual = State()
 
 
-@router.message(F.text == "🔌 Поиск компаний")
-@router.message(F.text == "/legal_discovery")
-async def discovery_start(message: Message, state: FSMContext) -> None:
+async def show_discovery_start(message: Message, state: FSMContext) -> None:
     await state.clear()
     await message.answer(
-        "🔌 Поиск компаний\n\n"
-        "Дальше идём по legal discovery flow:\n"
+        "🔍 Поиск компаний\n\n"
+        "Дальше идём по flow:\n"
         "источник -> ОКВЭД -> лимит -> preview -> import."
     )
     await message.answer("Выберите источник:", reply_markup=discovery_provider_markup())
 
 
+@router.message(F.text == "🔍 Поиск компаний")
+@router.message(F.text == "/legal_discovery")
+async def discovery_start(message: Message, state: FSMContext) -> None:
+    await show_discovery_start(message, state)
+
+
 @router.callback_query(F.data == "discovery:back:provider")
 async def discovery_back_to_provider(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(None)
-    await state.update_data(discovery_provider=None)
+    await state.update_data(
+        discovery_provider=None,
+        discovery_okved_code=None,
+        discovery_okved_title=None,
+        discovery_query=None,
+        discovery_current_page=1,
+        discovery_query_hash=None,
+    )
     if callback.message:
         await _safe_edit_message(callback.message, "Выберите источник:", reply_markup=discovery_provider_markup())
     await _safe_callback_answer(callback)
@@ -83,7 +96,7 @@ async def discovery_pick_provider(callback: CallbackQuery, state: FSMContext) ->
     if not callback.message:
         return
     provider = callback.data.rsplit(":", 1)[-1]
-    await state.update_data(discovery_provider=provider)
+    await state.update_data(discovery_provider="checko_html" if provider in {"mock", "checko_html"} else provider)
     await _safe_edit_message(callback.message, "Выберите ОКВЭД или нишу:", reply_markup=discovery_niche_markup())
     await _safe_callback_answer(callback)
 
@@ -98,7 +111,12 @@ async def discovery_pick_niche(callback: CallbackQuery, state: FSMContext) -> No
         await callback.message.answer("Введите ОКВЭД или нишу вручную.", reply_markup=flow_menu())
         await _safe_callback_answer(callback)
         return
-    await state.update_data(discovery_query=niche)
+    await state.update_data(
+        discovery_query=niche,
+        discovery_okved_code=niche,
+        discovery_okved_title=None,
+        discovery_current_page=1,
+    )
     await state.set_state(None)
     await callback.message.answer("Выберите лимит выдачи.")
     await callback.message.answer("Лимит:", reply_markup=discovery_limit_markup())
@@ -111,7 +129,13 @@ async def discovery_niche_manual(message: Message, state: FSMContext) -> None:
         await state.clear()
         await message.answer("Поиск компаний отменён.", reply_markup=main_menu())
         return
-    await state.update_data(discovery_query=(message.text or "").strip())
+    query = (message.text or "").strip()
+    await state.update_data(
+        discovery_query=query,
+        discovery_okved_code="manual",
+        discovery_okved_title=query,
+        discovery_current_page=1,
+    )
     await state.set_state(None)
     await message.answer("Выберите лимит выдачи.")
     await message.answer("Лимит:", reply_markup=discovery_limit_markup())
@@ -124,7 +148,42 @@ async def discovery_run_preview(callback: CallbackQuery, state: FSMContext) -> N
     limit = int(callback.data.rsplit(":", 1)[-1])
     await state.update_data(last_discovery_limit=limit)
     await _safe_edit_message(callback.message, "Ищу компании и собираю preview...")
-    await _run_preview(callback, state, limit=limit)
+    await _run_preview(callback, state, limit=limit, page=1)
+
+
+@router.callback_query(F.data == "discovery:next_batch")
+async def discovery_next_batch(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.message:
+        return
+    data = await state.get_data()
+    current_page = int(data.get("discovery_current_page") or 1)
+    limit = int(data.get("last_discovery_limit") or data.get("discovery_limit") or 25)
+    await _safe_edit_message(callback.message, "Ищу следующую пачку компаний...")
+    await _run_preview(callback, state, limit=limit, page=current_page + 1)
+
+
+@router.callback_query(F.data == "discovery:restart")
+async def discovery_restart(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.message:
+        return
+    data = await state.get_data()
+    provider = data.get("discovery_provider")
+    okved_code = data.get("discovery_okved_code")
+    query = data.get("discovery_query")
+    query_hash = data.get("discovery_query_hash")
+    if provider and okved_code and query_hash:
+        async with async_session_factory() as session:
+            await reset_discovery_cursor(
+                session,
+                provider=provider,
+                okved_code=okved_code,
+                query_hash=query_hash,
+            )
+    await state.update_data(discovery_current_page=1)
+    await _safe_edit_message(callback.message, "Начинаю поиск сначала...")
+    await _run_preview(callback, state, limit=int(data.get("last_discovery_limit") or 25), page=1)
+    if query:
+        await state.update_data(discovery_query=query)
 
 
 @router.callback_query(F.data == "discovery:retry:small")
@@ -133,7 +192,7 @@ async def discovery_retry_small(callback: CallbackQuery, state: FSMContext) -> N
         return
     await state.update_data(last_discovery_limit=5)
     await _safe_edit_message(callback.message, "Повторяю поиск с меньшим лимитом...")
-    await _run_preview(callback, state, limit=5)
+    await _run_preview(callback, state, limit=5, page=1)
 
 
 @router.callback_query(F.data.startswith("discovery:import:"))
@@ -146,11 +205,11 @@ async def discovery_import(callback: CallbackQuery, state: FSMContext) -> None:
     await state.update_data(last_legal_import_company_ids=result.added_company_ids)
     text = (
         "Импорт завершён\n\n"
-        f"Добавлено: {result.added_count}\n"
+        f"Импортировано: {result.added_count}\n"
+        f"Пропущено: {result.skipped_inactive + result.skipped_weak}\n"
         f"Дубликаты: {result.skipped_duplicates}\n"
-        f"Неактивные: {result.skipped_inactive}\n"
-        f"Слабые данные: {result.skipped_weak}\n"
-        f"Ошибки: {result.errors_count}"
+        f"Ошибки: {result.errors_count}\n"
+        "Lead fit будет посчитан после импорта."
     )
     await _safe_edit_message(callback.message, text, reply_markup=discovery_after_import_markup())
     await _safe_callback_answer(callback, "Импорт выполнен.")
@@ -224,6 +283,7 @@ async def _run_preview(
     state: FSMContext,
     *,
     limit: int,
+    page: int,
     city: str | None | object = ...,
     region: str | None | object = ...,
 ) -> None:
@@ -231,7 +291,9 @@ async def _run_preview(
         return
     data = await state.get_data()
     query = data.get("discovery_query") or "стоматология"
-    provider = data.get("discovery_provider")
+    provider = data.get("discovery_provider") or "checko_html"
+    okved_code = data.get("discovery_okved_code")
+    okved_title = data.get("discovery_okved_title")
     selected_city = None if city is ... else city
     selected_region = None if region is ... else region
     try:
@@ -239,9 +301,12 @@ async def _run_preview(
             preview = await run_legal_discovery_preview(
                 session,
                 query=query,
+                okved_code=None if okved_code in {None, "manual"} else okved_code,
+                okved_title=okved_title,
                 city=selected_city,
                 region=selected_region,
                 limit=limit,
+                page=page,
                 provider_code=provider,
             )
     except BrowserBackendError as exc:
@@ -264,6 +329,8 @@ async def _run_preview(
     await state.update_data(
         last_discovery_preview_id=preview.preview_id,
         last_discovery_limit=limit,
+        discovery_current_page=preview.current_page,
+        discovery_query_hash=preview.query_hash,
     )
     markup = discovery_zero_result_markup() if preview.total_found == 0 else discovery_preview_markup(preview_callback_token(preview.preview_id))
     await _safe_edit_message(callback.message, _render_preview(preview, compact=True), reply_markup=markup)
@@ -294,23 +361,28 @@ def _render_preview(preview, compact: bool = True) -> str:
         return truncate_telegram_text(_render_zero_result_preview(preview, compact=compact))
 
     okved_value = preview.okved_code or preview.debug_info.get("requested_okved") or "не указан"
+    importable_active_new = _count_importable_items(preview, "active_new")
+    importable_all_new = _count_importable_items(preview, "all_new")
+    importable_websites = _count_importable_items(preview, "new_with_websites")
+    importable_phone_or_site = _count_importable_items(preview, "new_with_phone_or_website")
     lines = [
         "Поиск компаний завершён",
         "",
         f"ОКВЭД: {okved_value}",
+        f"Страница Checko: {preview.current_page}",
+        f"Следующая страница: {preview.next_page}",
         "Регион: не используется в Checko, сортировка после импорта",
-        f"Final URL: {truncate_telegram_text(preview.debug_final_url or '-', limit=160)}",
-        f"Найдено компаний: {preview.total_found}",
-        f"Активных: {preview.active_count}",
-        f"Неактивных: {preview.inactive_count}",
-        f"Статус неизвестен: {preview.unknown_status_count}",
-        f"Новых для CRM: {preview.new_count}",
-        f"Дублей: {preview.duplicate_count}",
+        f"Найдено компаний в этой пачке: {preview.total_found}",
+        f"Новых / дублей: {preview.new_count} / {preview.duplicate_count}",
+        f"Импортируемых active_new: {importable_active_new}",
+        f"Импортируемых all_new: {importable_all_new}",
+        f"Импортируемых с сайтами: {importable_websites}",
+        f"Импортируемых с телефоном или сайтом: {importable_phone_or_site}",
         f"С ИНН: {preview.with_inn_count}",
         f"С ОГРН: {preview.with_ogrn_count}",
         f"С сайтами: {preview.with_website_count}",
         f"С телефонами: {preview.with_phone_count}",
-        f"Отброшено как не компания: {preview.skipped_not_company_count}",
+        "Lead fit будет посчитан после импорта.",
     ]
     if compact and preview.total_found > PREVIEW_RESULT_LIMIT:
         lines.append(TRUNCATED_RESULTS_NOTICE)
@@ -318,6 +390,30 @@ def _render_preview(preview, compact: bool = True) -> str:
     for index, item in enumerate(preview.items[:PREVIEW_RESULT_LIMIT], start=1):
         lines.append(_render_preview_company_line(index, item.company))
     return truncate_telegram_text("\n".join(lines))
+
+
+def _count_importable_items(preview, mode: str) -> int:
+    count = 0
+    for item in preview.items:
+        if item.status == "duplicate_existing":
+            continue
+        if mode == "active_new":
+            if item.status == "new" and item.business_status == "active" and not item.weak_data:
+                count += 1
+            continue
+        if mode == "all_new":
+            if item.status in {"new", "weak_data"}:
+                count += 1
+            continue
+        if mode == "new_with_websites":
+            if item.status in {"new", "weak_data"} and bool(item.company.websites):
+                count += 1
+            continue
+        if mode == "new_with_phone_or_website":
+            if item.status in {"new", "weak_data"} and bool(item.company.phones or item.company.websites):
+                count += 1
+            continue
+    return count
 
 
 def _render_preview_company_line(index: int, company) -> str:
@@ -362,6 +458,7 @@ def _render_zero_result_preview(preview, *, compact: bool) -> str:
         "Поиск компаний завершён, но компаний не найдено",
         "",
         f"ОКВЭД: {okved_value}",
+        f"Страница Checko: {preview.current_page}",
         "Регион: не используется в Checko, сортировка после импорта",
         f"Final URL: {preview.debug_final_url or '-'}",
         f"Title: {_trim_debug_value(preview.debug_title)}",
@@ -371,7 +468,6 @@ def _render_zero_result_preview(preview, *, compact: bool) -> str:
         f"Candidate-блоков найдено: {preview.parser_candidates_count}",
         f"Profile fetch ok: {preview.profile_fetch_success}",
         f"Profile fetch failed: {preview.profile_fetch_failed}",
-        f"Отброшено как не компания: {preview.skipped_not_company_count}",
     ]
     if preview.parser_candidates_count == 0:
         lines.extend(

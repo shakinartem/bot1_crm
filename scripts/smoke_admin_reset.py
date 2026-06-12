@@ -31,14 +31,17 @@ async def main() -> None:
     await create_db_schema()
     async with async_session_factory() as session:
         await create_company(session, CompanyCreate(name="Reset Clinic"))
-        prompt = render_admin_reset_prompt()
-        assert "RESET DATABASE" in prompt
+        prompt_crm = render_admin_reset_prompt("crm_only")
+        prompt_all = render_admin_reset_prompt("all_data")
+        assert "RESET CRM" in prompt_crm
+        assert "RESET ALL DATA" in prompt_all
         assert "ALLOW_DB_RESET=true" in render_admin_reset_disabled()
         before = await session.execute(select(Company))
         assert len(before.scalars().all()) == 1
-        result = await reset_database(session, full_reset=False)
+        result = await reset_database(session, mode="crm_only", keep_users=True, clear_debug_files=False)
         assert result["companies"] == 1
-        assert "companies 1" in render_admin_reset_result(result)
+        assert result["mode"] == "crm_only"
+        assert "companies=1" in render_admin_reset_result(result)
         after = await session.execute(select(Company))
         assert len(after.scalars().all()) == 0
     print("smoke_admin_reset ok")

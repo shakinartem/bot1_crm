@@ -26,12 +26,12 @@ CALL_RESULT_OPTIONS = [
 
 def main_menu() -> ReplyKeyboardMarkup:
     rows = [
-        [KeyboardButton(text="🔌 Поиск и импорт"), KeyboardButton(text="🏢 CRM / Компании")],
-        [KeyboardButton(text="👤 Мои лиды"), KeyboardButton(text="📞 Продажи")],
-        [KeyboardButton(text="🏷 Группы лидов"), KeyboardButton(text="📅 Мои касания")],
-        [KeyboardButton(text="📄 КП и документы"), KeyboardButton(text="🧠 AI / Research")],
-        [KeyboardButton(text="📊 Аналитика"), KeyboardButton(text="⚙️ Настройки / Admin")],
-        [KeyboardButton(text="🔌 Поиск компаний")],
+        [KeyboardButton(text="🔍 Поиск компаний")],
+        [KeyboardButton(text="🏢 CRM / Компании"), KeyboardButton(text="👤 Мои лиды")],
+        [KeyboardButton(text="📞 Продажи"), KeyboardButton(text="🏷 Группы лидов")],
+        [KeyboardButton(text="📅 Мои касания"), KeyboardButton(text="📄 КП и документы")],
+        [KeyboardButton(text="🧠 AI / Research"), KeyboardButton(text="📊 Аналитика")],
+        [KeyboardButton(text="⚙️ Настройки")],
     ]
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
 
@@ -59,7 +59,7 @@ def contact_type_menu() -> ReplyKeyboardMarkup:
 def search_import_menu_markup() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🔌 Поиск компаний", callback_data="menu:search_import:companies")],
+            [InlineKeyboardButton(text="🔍 Поиск компаний", callback_data="menu:search_import:companies")],
             [InlineKeyboardButton(text="📥 Импорт CSV", callback_data="menu:search_import:import_csv")],
             [InlineKeyboardButton(text="🔎 Поиск по CRM", callback_data="menu:search_import:crm_search")],
             [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu:main")],
@@ -124,9 +124,13 @@ def ai_research_section_menu_markup() -> InlineKeyboardMarkup:
 
 
 def settings_section_menu_markup(include_admin_reset: bool = False) -> InlineKeyboardMarkup:
-    rows = [[InlineKeyboardButton(text="ℹ️ О разделе", callback_data="menu:settings:about")]]
+    rows = [
+        [InlineKeyboardButton(text="ℹ️ Состояние системы", callback_data="menu:settings:system")],
+        [InlineKeyboardButton(text="🔎 Настройки поиска", callback_data="menu:settings:search")],
+    ]
     if include_admin_reset:
-        rows.append([InlineKeyboardButton(text="🧹 Очистить базу DEV", callback_data="admin:reset:start")])
+        rows.append([InlineKeyboardButton(text="🧹 Очистить CRM-данные", callback_data="admin:reset:crm:start")])
+        rows.append([InlineKeyboardButton(text="🧨 Очистить все данные", callback_data="admin:reset:all:start")])
     rows.append([InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu:main")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 

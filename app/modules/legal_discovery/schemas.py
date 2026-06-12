@@ -82,6 +82,9 @@ class LegalDiscoveryPreview(BaseModel):
     city: str | None = None
     region: str | None = None
     provider: str
+    current_page: int = 1
+    next_page: int = 2
+    query_hash: str | None = None
     total_found: int
     active_count: int
     inactive_count: int
@@ -131,6 +134,7 @@ class LegalDiscoverySearchRequest(BaseModel):
     city: str | None = None
     region: str | None = None
     limit: int = 50
+    page: int = 1
     only_main_okved: bool = True
     only_active: bool = True
     include_profiles: bool = True

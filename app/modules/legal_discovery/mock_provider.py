@@ -92,6 +92,7 @@ class MockLegalDiscoveryProvider:
         city: str | None = None,
         region: str | None = None,
         limit: int = 50,
+        page: int = 1,
         only_main_okved: bool = True,
         only_active: bool = True,
         include_profiles: bool = True,
@@ -113,4 +114,5 @@ class MockLegalDiscoveryProvider:
             items = [company for company in items if (company.city or "").lower() == normalized_city]
         if region:
             items = [company for company in items if (company.region or "").lower() == region.lower().strip()]
-        return items[:limit]
+        start = max(0, page - 1) * limit
+        return items[start : start + limit]

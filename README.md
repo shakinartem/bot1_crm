@@ -37,7 +37,7 @@ This backend pass adds the first post-import qualification layer without changin
 - Fast CRM filters use nullable `Company` fields: `lead_fit_score`, `lead_fit_group`, `lead_fit_calculated_at`, `deleted_at`, and `deleted_by_user_id`.
 - Soft delete hides companies from normal CRM lists without destructive removal.
 - A backend 7-touch workflow can create the default sequence of follow-up tasks through API.
-- Dev database reset is guarded by both `ADMIN_IDS` and `ALLOW_DB_RESET=true`.
+- CRM/all_data reset is guarded by both `ADMIN_IDS` and `ALLOW_DB_RESET=true`.
 
 Additional env for this pass:
 
@@ -412,7 +412,7 @@ If the header is wrong, the API returns:
 
 The Telegram main menu is now grouped for daily manager work:
 
-- `🔍 Поиск и импорт`
+- `🔍 Поиск компаний`
 - `🏢 CRM / Компании`
 - `👤 Мои лиды`
 - `📞 Продажи`
@@ -420,11 +420,11 @@ The Telegram main menu is now grouped for daily manager work:
 - `🧠 AI / Research`
 - `📊 Аналитика`
 - `⚙️ Настройки`
-- `🔍 Поиск компаний`
 
 Notes:
 
 - `🔍 Поиск компаний` is the direct entrypoint into the existing legal discovery flow
+- live Telegram discovery no longer shows Mock / Dev
 - the flow remains `источник -> ОКВЭД -> лимит -> preview -> import`
 - if a section is prepared but not fully implemented yet, the bot shows a placeholder instead of failing
 
@@ -478,10 +478,10 @@ Telegram flow:
 
 Search/import workflow:
 
-- open `🔍 Поиск и импорт` for grouped navigation
 - use `🔍 Поиск компаний` for legal discovery
 - use `📥 Импорт CSV` for bulk import
 - use `🔎 Поиск по CRM` for existing cards
+- use `⚙️ Настройки` for system status and read-only search settings
 
 API flow:
 

@@ -20,6 +20,11 @@
 
 ## Done
 
+- Telegram live discovery cleanup
+- Legal discovery cursor navigation
+- Telegram settings and system status
+- Read-only search settings
+- Smoke suite refresh
 - Website denylist and health check
 - Yandex website search by INN/name/city foundation
 - Improved phone parser
@@ -34,7 +39,7 @@
 - Added Telegram website research action
 - 7 touches backend workflow
 - Company soft delete
-- Dev database reset
+- CRM/all_data reset
 - Fixed Checko validation for candidates without INN on list page.
 - Added real Checko profile URL validation.
 - Fixed Telegram preview MESSAGE_TOO_LONG

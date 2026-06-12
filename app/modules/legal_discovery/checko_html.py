@@ -174,6 +174,7 @@ class CheckoHtmlLegalDiscoveryProvider:
         city: str | None = None,
         region: str | None = None,
         limit: int = 50,
+        page: int = 1,
         only_main_okved: bool = True,
         only_active: bool = True,
         include_profiles: bool = True,
@@ -242,7 +243,7 @@ class CheckoHtmlLegalDiscoveryProvider:
 
         backend = self._browser_backend or get_browser_backend(self._settings)
         try:
-            urls = self._build_list_urls(resolved_code, limit)
+            urls = self._build_list_urls(resolved_code, page)
             list_items: list[CheckoListItem] = []
             for page_index, url in enumerate(urls, start=1):
                 page = await backend.fetch_checko_list_page(url, region_query=region_query)
@@ -339,11 +340,10 @@ class CheckoHtmlLegalDiscoveryProvider:
             if self._browser_backend is None:
                 await backend.close()
 
-    def _build_list_urls(self, okved_code: str, limit: int) -> list[str]:
-        pages = max(1, min(self._settings.checko_html_max_pages, math.ceil(limit / 20)))
+    def _build_list_urls(self, okved_code: str, page: int) -> list[str]:
+        current_page = max(1, page)
         return [
-            f"{self._settings.checko_html_base_url.rstrip('/')}/company/select?{urlencode({'code': okved_code or 'all', 'page': page})}"
-            for page in range(1, pages + 1)
+            f"{self._settings.checko_html_base_url.rstrip('/')}/company/select?{urlencode({'code': okved_code or 'all', 'page': current_page})}"
         ]
 
     def _resolve_concurrency(self, requested: int | None) -> int:

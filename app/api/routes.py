@@ -174,7 +174,9 @@ class TouchPlanCreateRequest(BaseModel):
 
 class AdminResetRequest(BaseModel):
     confirmation: str
-    full_reset: bool = False
+    mode: str = "crm_only"
+    keep_users: bool = True
+    clear_debug_files: bool | None = None
 
 
 async def require_bot2_auth(authorization: str | None = Header(default=None)) -> None:
@@ -275,6 +277,7 @@ async def legal_discovery_search(
             city=payload.city,
             region=payload.region,
             limit=payload.limit,
+            page=payload.page,
             only_main_okved=payload.only_main_okved,
             only_active=payload.only_active,
             include_profiles=payload.include_profiles,
@@ -1213,10 +1216,18 @@ async def admin_reset_database(
     payload: AdminResetRequest,
     session: AsyncSession = Depends(get_session),
 ):
-    if payload.confirmation != "RESET DATABASE":
+    if payload.mode not in {"crm_only", "all_data"}:
+        raise HTTPException(status_code=400, detail="Invalid reset mode")
+    expected_confirmation = "RESET ALL DATA" if payload.mode == "all_data" else "RESET CRM"
+    if payload.confirmation != expected_confirmation:
         raise HTTPException(status_code=400, detail="Invalid confirmation phrase")
     try:
-        return await reset_database(session, full_reset=payload.full_reset)
+        return await reset_database(
+            session,
+            mode=payload.mode,  # type: ignore[arg-type]
+            keep_users=payload.keep_users,
+            clear_debug_files=payload.clear_debug_files,
+        )
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 

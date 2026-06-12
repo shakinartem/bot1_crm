@@ -2,12 +2,18 @@ from __future__ import annotations
 
 from datetime import datetime
 from html import escape
+from typing import Any
+
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.modules.crm.constants import TaskStatus
-from app.modules.crm.models import Company, FollowUpTask
+from app.modules.crm.models import CRMUser, Company, FollowUpTask
 from app.modules.crm.service import format_datetime
 from app.modules.crm.touch_service import TOUCH_PLAN
+from app.modules.digest.models import DigestSettings
+from app.modules.legal_discovery.models import LegalDiscoveryCursor
 from app.modules.lead_fit.schemas import LeadFitScore
 
 
@@ -171,11 +177,17 @@ def render_delete_confirmation(company: Company) -> str:
     )
 
 
-def render_admin_reset_prompt() -> str:
+def render_admin_reset_prompt(mode: str = "crm_only") -> str:
+    if mode == "all_data":
+        return (
+            "Это удалит все рабочие данные, discovery cursors, research, insights, proposals и debug-файлы. "
+            "Пользователи по умолчанию сохраняются.\n\n"
+            "Для подтверждения отправьте точный текст:\nRESET ALL DATA"
+        )
     return (
-        "Это удалит CRM-данные, компании, задачи, инсайты, research/proposals. "
-        "Пользователи останутся.\n\n"
-        "Для подтверждения отправьте точный текст:\nRESET DATABASE"
+        "Это удалит CRM-данные, компании, задачи, инсайты, research/proposals и discovery cursors. "
+        "Пользователи по умолчанию сохраняются.\n\n"
+        "Для подтверждения отправьте точный текст:\nRESET CRM"
     )
 
 
@@ -184,8 +196,80 @@ def render_admin_reset_disabled() -> str:
 
 
 def render_admin_reset_result(result: dict[str, int | bool]) -> str:
-    parts = [f"{key} {value}" for key, value in result.items() if key != "full_reset"]
+    parts = [f"{key}={value}" for key, value in result.items() if key not in {"mode", "keep_users", "clear_debug_files"}]
     return clamp_text(f"База очищена: {', '.join(parts)}")
+
+
+async def build_system_status_snapshot(session: AsyncSession) -> dict[str, Any]:
+    settings = get_settings()
+    total_companies = int(await session.scalar(select(func.count(Company.id))) or 0)
+    total_users = int(await session.scalar(select(func.count(CRMUser.id))) or 0)
+    open_tasks = int(
+        await session.scalar(select(func.count(FollowUpTask.id)).where(FollowUpTask.status == TaskStatus.OPEN.value)) or 0
+    )
+    total_cursors = int(await session.scalar(select(func.count(LegalDiscoveryCursor.id))) or 0)
+    digest_settings = int(await session.scalar(select(func.count(DigestSettings.id))) or 0)
+    return {
+        "companies": total_companies,
+        "users": total_users,
+        "open_tasks": open_tasks,
+        "discovery_cursors": total_cursors,
+        "digest_settings": digest_settings,
+        "allow_db_reset": settings.allow_db_reset,
+        "legal_discovery_provider": settings.legal_discovery_provider,
+        "checko_html_enabled": settings.checko_html_enabled,
+        "checko_html_base_url": settings.checko_html_base_url,
+        "checko_html_debug": settings.checko_html_debug,
+        "checko_html_page_delay_ms": settings.checko_html_page_delay_ms,
+        "storage_path": str(settings.storage_path),
+        "admin_ids": len(settings.admin_id_list),
+    }
+
+
+def render_system_status_text(snapshot: dict[str, Any]) -> str:
+    lines = [
+        "ℹ️ Состояние системы",
+        "",
+        f"Компаний: {snapshot.get('companies', 0)}",
+        f"Пользователей CRM: {snapshot.get('users', 0)}",
+        f"Открытых задач: {snapshot.get('open_tasks', 0)}",
+        f"Discovery cursors: {snapshot.get('discovery_cursors', 0)}",
+        f"Digest settings: {snapshot.get('digest_settings', 0)}",
+        "",
+        "Флаги:",
+        f"ALLOW_DB_RESET: {'true' if snapshot.get('allow_db_reset') else 'false'}",
+        f"ADMIN_IDS: {snapshot.get('admin_ids', 0)}",
+        "",
+        "Legal discovery:",
+        f"Provider: {snapshot.get('legal_discovery_provider', 'n/a')}",
+        f"Checko HTML: {'on' if snapshot.get('checko_html_enabled') else 'off'}",
+        f"Base URL: {snapshot.get('checko_html_base_url', 'n/a')}",
+        f"Debug: {'on' if snapshot.get('checko_html_debug') else 'off'}",
+        f"Page delay ms: {snapshot.get('checko_html_page_delay_ms', 0)}",
+        "",
+        f"Storage: {snapshot.get('storage_path', 'n/a')}",
+    ]
+    return "\n".join(lines)
+
+
+def render_search_settings_text() -> str:
+    settings = get_settings()
+    lines = [
+        "🔎 Настройки поиска",
+        "",
+        f"LEGAL_DISCOVERY_PROVIDER: {settings.legal_discovery_provider}",
+        f"LEGAL_DISCOVERY_DEFAULT_LIMIT: {settings.legal_discovery_default_limit}",
+        f"CHECKO_HTML_ENABLED: {'true' if settings.checko_html_enabled else 'false'}",
+        f"CHECKO_HTML_BASE_URL: {settings.checko_html_base_url}",
+        f"CHECKO_HTML_ONLY_MAIN_OKVED: {'true' if settings.checko_html_only_main_okved else 'false'}",
+        f"CHECKO_HTML_ONLY_ACTIVE: {'true' if settings.checko_html_only_active else 'false'}",
+        f"CHECKO_HTML_PROFILE_ENABLED: {'true' if settings.checko_html_profile_enabled else 'false'}",
+        f"CHECKO_HTML_PAGE_DELAY_MS: {settings.checko_html_page_delay_ms}",
+        f"CHECKO_HTML_DEBUG: {'true' if settings.checko_html_debug else 'false'}",
+        "",
+        "Настройки только для просмотра.",
+    ]
+    return "\n".join(lines)
 
 
 def render_website_research_result(outcome, company: Company) -> str:

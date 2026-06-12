@@ -6,8 +6,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 def discovery_provider_markup() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Checko HTML", callback_data="discovery:provider:checko_html")],
-            [InlineKeyboardButton(text="Mock / Dev", callback_data="discovery:provider:mock")],
+            [InlineKeyboardButton(text="🔍 Поиск компаний", callback_data="discovery:provider:checko_html")],
         ]
     )
 
@@ -30,7 +29,7 @@ def discovery_limit_markup() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="50", callback_data="discovery:limit:50")],
             [InlineKeyboardButton(text="100", callback_data="discovery:limit:100")],
             [InlineKeyboardButton(text="500", callback_data="discovery:limit:500")],
-            [InlineKeyboardButton(text="Назад", callback_data="discovery:back:provider")],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="discovery:back:provider")],
         ]
     )
 
@@ -40,8 +39,10 @@ def discovery_preview_markup(preview_id: str) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text="Импортировать активные новые", callback_data=f"discovery:import:{preview_id}:active_new")],
             [InlineKeyboardButton(text="Импортировать все новые", callback_data=f"discovery:import:{preview_id}:all_new")],
-            [InlineKeyboardButton(text="Импортировать с сайтами", callback_data=f"discovery:import:{preview_id}:new_with_websites")],
+            [InlineKeyboardButton(text="Импортировать с сайтом", callback_data=f"discovery:import:{preview_id}:new_with_websites")],
             [InlineKeyboardButton(text="Импортировать с телефоном или сайтом", callback_data=f"discovery:import:{preview_id}:new_with_phone_or_website")],
+            [InlineKeyboardButton(text="➡️ Следующая пачка", callback_data="discovery:next_batch")],
+            [InlineKeyboardButton(text="🔄 Начать сначала", callback_data="discovery:restart")],
             [InlineKeyboardButton(text="Экспорт preview CSV", callback_data=f"discovery:export:{preview_id}")],
             [InlineKeyboardButton(text="Отмена", callback_data="discovery:cancel")],
         ]
@@ -51,8 +52,9 @@ def discovery_preview_markup(preview_id: str) -> InlineKeyboardMarkup:
 def discovery_after_import_markup() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Запустить research", callback_data="research_queue:from_last_import")],
-            [InlineKeyboardButton(text="Назад", callback_data="company:list")],
+            [InlineKeyboardButton(text="➡️ Искать следующие компании", callback_data="discovery:next_batch")],
+            [InlineKeyboardButton(text="🔄 Начать сначала", callback_data="discovery:restart")],
+            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu:main")],
         ]
     )
 
@@ -60,8 +62,8 @@ def discovery_after_import_markup() -> InlineKeyboardMarkup:
 def discovery_browser_error_markup() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Назад", callback_data="discovery:back:provider")],
-            [InlineKeyboardButton(text="Mock / Dev", callback_data="discovery:provider:mock")],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="discovery:back:provider")],
+            [InlineKeyboardButton(text="🔄 Начать сначала", callback_data="discovery:restart")],
         ]
     )
 
@@ -69,8 +71,7 @@ def discovery_browser_error_markup() -> InlineKeyboardMarkup:
 def discovery_zero_result_markup() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Повторить с меньшим лимитом", callback_data="discovery:retry:small")],
-            [InlineKeyboardButton(text="Mock / Dev", callback_data="discovery:provider:mock")],
-            [InlineKeyboardButton(text="Назад", callback_data="discovery:back:provider")],
+            [InlineKeyboardButton(text="🔄 Начать сначала", callback_data="discovery:restart")],
+            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu:main")],
         ]
     )

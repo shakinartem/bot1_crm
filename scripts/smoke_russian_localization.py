@@ -101,7 +101,7 @@ async def verify_localization(company_id: int) -> None:
 
     button_texts = [button.text for row in main_menu().keyboard for button in row]
     for expected in (
-        "🔍 Поиск и импорт",
+        "🔍 Поиск компаний",
         "🏢 CRM / Компании",
         "👤 Мои лиды",
         "📞 Продажи",
@@ -109,7 +109,6 @@ async def verify_localization(company_id: int) -> None:
         "🧠 AI / Research",
         "📊 Аналитика",
         "⚙️ Настройки",
-        "🔍 Поиск компаний",
     ):
         assert expected in button_texts, f"main menu must include {expected!r}"
 

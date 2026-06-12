@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Cleaned up live Telegram discovery to a single "🔍 Поиск компаний" entrypoint and removed visible Mock / Dev from live UX.
+- Added page-based legal discovery cursors with next-batch/restart flow and updated preview counters.
+- Added CRM/all_data reset modes, reset confirmations, and debug-file cleanup with users preserved by default.
+- Added Telegram system status and read-only search settings screens.
+- Added smoke coverage for discovery cursor, settings, and reset cleanup.
 - Added website denylist and website health checks.
 - Added Yandex website search foundation by INN/OGRN/name+city.
 - Improved Russian phone normalization and extraction.
