@@ -101,6 +101,21 @@ class ResearchContextRead(BaseModel):
     ai_summary: str | None = None
 
 
+class MapsScore(BaseModel):
+    total_score: int = Field(ge=0, le=100)
+    status: Literal["verified", "candidate", "not_found", "mismatch"]
+    reasons: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    matched_fields: list[Literal["name", "city", "address", "phone", "website", "inn"]] = Field(default_factory=list)
+    yandex_maps_url: str | None = None
+    rating: float | None = None
+    reviews_count: int | None = None
+    photos_present: bool | None = None
+    website_present: bool | None = None
+    phone_present: bool | None = None
+    address_present: bool | None = None
+
+
 FetchBackend = Callable[[str], Awaitable[FetchResult]]
 
 

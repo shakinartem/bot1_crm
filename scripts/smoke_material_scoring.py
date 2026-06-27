@@ -61,11 +61,11 @@ def main() -> None:
     score = calculate_material_quality_score(company_context)
     assert score.website_score == 60
     assert score.socials_score == 25
-    assert score.maps_score == 67
+    assert score.maps_score == 57
     assert score.trust_score == 62
     assert score.conversion_score == 43
     assert score.contact_score == 86
-    assert score.total_score == 58
+    assert score.total_score == 57
     assert score.grade == "normal"
 
     sparse_score = calculate_material_quality_score(

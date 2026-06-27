@@ -26,6 +26,75 @@ Current MVP discovery defaults:
 - `Camoufox` is optional and lazy-loaded through `BROWSER_BACKEND=camoufox`.
 - Smoke scripts stay offline by using fixtures and mock backends.
 
+## CSV Company Import
+
+The CRM supports importing companies from CSV files via Telegram or API.
+
+### Supported columns
+
+| Field | Aliases |
+|---|---|
+| `legal_name` | legal_name, юридическое название, полное название |
+| `display_name` | name, short_name, company_name, название, компания, организация |
+| `inn` | inn, ИНН |
+| `ogrn` | ogrn, ОГРН |
+| `city` | city, город |
+| `region` | region, регион, область |
+| `address` | address, адрес, юридический адрес |
+| `phone` | phone, телефон, номер |
+| `email` | email, e-mail, почта |
+| `website` | website, site, сайт |
+| `checko_profile_url` | checko_url, checko, ссылка checko |
+| `yandex_maps_url` | map_url, maps, карта, яндекс карты |
+| `status` | status, статус |
+| `priority` | priority, приоритет |
+| `notes` | notes, заметки, комментарий |
+| `source` | source, источник |
+
+### Deduplication
+
+1. INN match
+2. OGRN match
+3. phone match
+4. website match
+5. name + city match (case-insensitive)
+
+### Import modes
+
+- `create_only` — skip duplicates
+- `update_existing` — update only existing fields (non-empty values)
+- `upsert` — create new or update existing
+
+### Telegram upload flow
+
+1. Send CSV file
+2. Bot shows preview: columns, stats, sample rows
+3. Choose import mode
+4. Bot imports and shows summary + lead groups
+
+### API endpoints
+
+- `POST /api/companies/import/csv/preview` — multipart/form-data, returns preview
+- `POST /api/companies/import/csv` — multipart/form-data with mode and source
+
+### Website Search Strategy
+
+Search queries now prioritize:
+1. `{inn} {short_name} сайт`
+2. `{inn} {legal_name} сайт`
+3. `{inn} сайт`
+4. `{inn} официальный сайт` (if no name available)
+
+### Yandex Maps Search Strategy
+
+Search queries now prioritize:
+1. `{short_name} {address}`
+2. `{short_name} {city} {address}`
+3. `{legal_name} {address}`
+4. `{phone} {address}`
+
+Only scored as "verified" with ≥2 strong signals (name + address/phone/website/inn).
+
 ## Lead Quality Backend First Pass
 
 This backend pass adds the first post-import qualification layer without changing the core rule:
@@ -57,6 +126,18 @@ Telegram CRM now also includes a manager-friendly UX layer for the new lead-qual
 - admin-only DEV reset flow guarded by both `ADMIN_IDS` and `ALLOW_DB_RESET=true`
 - `🧠 Website research` and `🔄 Рассчитать приоритет` actions directly from the company card
 - render-safe Telegram text output capped to 3500 characters for the new screens
+
+## CRM Quality Pass
+
+This pass tightens research quality and manual CRM editing:
+
+- website resolution now uses a broader denylist and never keeps denied URLs as the official company website
+- `Checko` profile URLs are stored separately from the official website field
+- Yandex Maps research is available from the company card and API, with a scored candidate/verified flow
+- company cards show `Checko` and `Карты` links separately
+- Telegram company cards now support manual field editing with save/cancel flow
+- company lists in Telegram are paginated and show total, active, deleted, and current-page counts
+- smoke scripts now cover website denylist quality, maps research scoring, manual company editing, and Telegram company card rendering
 
 ## Setup
 

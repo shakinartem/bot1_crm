@@ -9,6 +9,7 @@
 - [ ] Live Yandex testing
 - [ ] Full RBAC
 - [ ] Web dashboard planning
+- [ ] Review manual company edit validation UX for status/priority labels
 
 ## Backlog
 
@@ -20,12 +21,24 @@
 
 ## Done
 
+- CSV company import with column mapping and deduplication
+- Telegram CSV upload flow with preview and 3 import modes
+- API CSV import endpoints (preview + commit)
+- Website search updated: INN + company name + "сайт" as primary query
+- Yandex Maps search updated: company name + address as primary query
+- Stricter Maps scoring: verified only with ≥2 strong signals
+- Smoke tests for CSV import, Telegram flow, API, updated resolver and maps
 - Telegram live discovery cleanup
 - Legal discovery cursor navigation
 - Telegram settings and system status
 - Read-only search settings
 - Smoke suite refresh
 - Website denylist and health check
+- Yandex Maps research and scoring
+- Checko profile URL storage separate from website
+- Telegram company list pagination
+- Telegram manual company edit flow
+- Smoke coverage for denylist, maps, edit, and card rendering
 - Yandex website search by INN/name/city foundation
 - Improved phone parser
 - Post-import lead fit scoring

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.modules.calls.models import CallRecord
-from app.modules.crm.models import Company, CompanyInsightSnapshot, ContactPoint, DecisionMaker, FollowUpTask, LeadInteraction, CRMUser
+from app.modules.crm.models import AuditLog, Company, CompanyInsightSnapshot, ContactPoint, DecisionMaker, FollowUpTask, LeadInteraction, CRMUser
 from app.modules.digest.models import DigestSettings
 from app.modules.enrichment.models import EnrichmentSnapshot
 from app.modules.intelligence.models import IntelligenceSnapshot
@@ -50,6 +50,7 @@ async def reset_database(
         ("research_jobs", ResearchJob),
         ("proposal_drafts", ProposalDraft),
         ("legal_discovery_cursors", LegalDiscoveryCursor),
+        ("audit_log", AuditLog),
         ("companies", Company),
     ]
     for key, model in ordered_models:

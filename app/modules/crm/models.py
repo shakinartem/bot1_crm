@@ -63,6 +63,7 @@ class Company(Base):
     region: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     phone: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     website: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    checko_profile_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     social_links: Mapped[str | None] = mapped_column(Text, nullable=True)
     maps_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     vk_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -82,6 +83,14 @@ class Company(Base):
     lead_fit_score: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     lead_fit_group: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     lead_fit_calculated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    maps_score: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    website_score: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    digital_score: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    digital_grade: Mapped[str | None] = mapped_column(String(1), nullable=True, index=True)
+    maps_confidence: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    website_confidence: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    maps_reviews: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    maps_rating: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -123,6 +132,10 @@ class Company(Base):
         cascade="all, delete-orphan",
     )
     insight_snapshots: Mapped[list["CompanyInsightSnapshot"]] = relationship(
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+    audit_logs: Mapped[list["AuditLog"]] = relationship(
         back_populates="company",
         cascade="all, delete-orphan",
     )
@@ -281,3 +294,18 @@ from app.modules.enrichment.models import EnrichmentSnapshot  # noqa: E402,F401
 from app.modules.intelligence.models import IntelligenceSnapshot  # noqa: E402,F401
 from app.modules.proposals.models import ProposalDraft  # noqa: E402,F401
 from app.modules.research_queue.models import ResearchJob  # noqa: E402,F401
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_log"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("crm_users.id", ondelete="SET NULL"), nullable=True, index=True)
+    action: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    field_name: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    old_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    new_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    company: Mapped["Company"] = relationship(back_populates="audit_logs")

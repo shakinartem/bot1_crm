@@ -38,6 +38,12 @@ class ContactPointStates(StatesGroup):
     is_primary = State()
 
 
+class CompanyEditStates(StatesGroup):
+    field = State()
+    value = State()
+    confirm = State()
+
+
 class TaskStates(StatesGroup):
     title = State()
     description = State()
@@ -46,3 +52,9 @@ class TaskStates(StatesGroup):
 
 class AdminResetStates(StatesGroup):
     confirmation = State()
+
+
+class TouchWorkflowStates(StatesGroup):
+    selecting_result = State()
+    entering_comment = State()
+    entering_next_date = State()

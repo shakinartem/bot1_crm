@@ -120,6 +120,7 @@ def _score_maps(company_context: Mapping[str, Any]) -> int:
         bool(maps.get("contact_consistency")),
         bool(maps.get("has_photos")),
         bool(maps.get("has_description")) or bool(maps.get("has_services")),
+        (maps.get("research_status") == "verified") or (_safe_float(maps.get("research_score")) or 0) >= 75,
     )
 
 
@@ -185,6 +186,7 @@ def _build_reasons(scores: Mapping[str, int]) -> list[str]:
 def _build_risks(company_context: Mapping[str, Any], scores: Mapping[str, int]) -> list[str]:
     website = _as_dict(company_context.get("website"))
     socials = _as_dict(company_context.get("socials"))
+    maps = _as_dict(company_context.get("maps"))
     risks: list[str] = []
     if scores["socials"] < 50:
         risks.append(_check("соцсети неактивны, редки или пока слабо усиливают доверие"))
@@ -194,6 +196,8 @@ def _build_risks(company_context: Mapping[str, Any], scores: Mapping[str, int]) 
         risks.append(_check("на сайте нет заметного CTA или понятного шага к записи"))
     if not bool(socials.get("active")):
         risks.append(_check("соцпрофили обновляются недостаточно регулярно, чтобы поддерживать доверие"))
+    if maps.get("has_listing") and maps.get("research_status") not in {"verified"}:
+        risks.append(_check("карточка на картах есть, но её ещё стоит вручную подтвердить"))
     return risks
 
 

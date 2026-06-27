@@ -91,6 +91,8 @@ async def run_company_research(
 
     parsed = parse_company_site(fetch.html, fetch.final_url or resolution.selected_url)
     hypotheses = build_site_hypotheses(parsed)
+    website_score = _score_website(resolution.selected_url, parsed.signals, len(fetch.html))
+    company.website_score = website_score
     updated_fields = await _apply_parsed_data(session, company, resolution.selected_url, resolution.confidence, parsed)
     return await _persist_research_outcome(
         session,
@@ -197,6 +199,14 @@ async def _apply_parsed_data(
             )
             existing.add(key)
     return updated_fields
+
+
+def _score_website(url: str, signals, html_length: int) -> int:
+    try:
+        from app.modules.enrichment.analyzer import compute_website_score
+        return compute_website_score(url, signals, html_length)
+    except Exception:
+        return 0
 
 
 def _can_replace_website(current_website: str | None) -> bool:

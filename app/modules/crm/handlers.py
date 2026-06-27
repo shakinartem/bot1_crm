@@ -6,12 +6,13 @@ from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, InlineKeyboardButton, Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from pydantic import ValidationError
 
 from app.database import async_session_factory
 from app.modules.analytics.service import format_company_card_with_score
 from app.modules.ai.service import prepare_cold_call
-from app.modules.crm.constants import CONTACT_TYPE_LABELS, ContactType
+from app.modules.crm.constants import COMPANY_STATUS_LABELS, PRIORITY_LABELS, CONTACT_TYPE_LABELS, ContactType
 from app.modules.crm.handoff import build_consultation_handoff_payload
 from app.modules.crm.keyboards import (
     CANCEL_TEXT,
@@ -21,6 +22,7 @@ from app.modules.crm.keyboards import (
     ai_research_section_menu_markup,
     call_results_markup,
     company_actions,
+    company_list_paginated_markup,
     company_list_markup,
     contact_type_menu,
     crm_section_menu_markup,
@@ -42,10 +44,12 @@ from app.modules.crm.keyboards import (
     today_tasks_markup,
     yes_no_menu,
 )
-from app.modules.crm.schemas import CompanyCreate, ContactPointCreate, DecisionMakerCreate
+from app.modules.crm.schemas import CompanyCreate, CompanyManualUpdate, ContactPointCreate, DecisionMakerCreate
 from app.modules.crm.service import (
     add_contact_point,
     add_decision_maker,
+    count_all_companies,
+    count_deleted_companies,
     change_company_status,
     complete_task,
     create_company,
@@ -70,10 +74,12 @@ from app.modules.crm.service import (
     record_call_result,
     search_companies,
     suggest_next_task_title,
+    update_company_manual_fields,
 )
 from app.modules.crm.states import (
     CompanyCallStates,
     CompanyCreateStates,
+    CompanyEditStates,
     CompanyNoteStates,
     CompanySearchStates,
     ContactPointStates,
@@ -91,6 +97,22 @@ router = Router(name="crm")
 CONTACT_TYPE_BY_LABEL = {label: value for value, label in CONTACT_TYPE_LABELS.items()}
 _CRM_REGION_TOKENS: dict[str, str] = {}
 _CRM_CITY_TOKENS: dict[str, tuple[str | None, str]] = {}
+COMPANY_LIST_PAGE_SIZE = 15
+COMPANY_EDIT_FIELD_LABELS = [
+    ("display_name", "Название"),
+    ("legal_name", "Юр. название"),
+    ("city", "Город"),
+    ("region", "Регион"),
+    ("address", "Адрес"),
+    ("phone", "Телефон"),
+    ("email", "Email"),
+    ("website", "Сайт"),
+    ("checko_profile_url", "Checko URL"),
+    ("map_url", "Map URL"),
+    ("status", "Статус"),
+    ("priority", "Приоритет"),
+    ("notes", "Заметка"),
+]
 
 
 def _is_skip(text: str | None) -> bool:
@@ -100,6 +122,54 @@ def _is_skip(text: str | None) -> bool:
 def _clean_optional(text: str | None) -> str | None:
     value = (text or "").strip()
     return value or None
+
+
+def _edit_fields_markup(company_id: int) -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton(text=label, callback_data=f"company:edit:{company_id}:{field}")]
+        for field, label in COMPANY_EDIT_FIELD_LABELS
+    ]
+    rows.append([InlineKeyboardButton(text="⬅️ К карточке", callback_data=f"company:open:{company_id}")])
+    return simple_menu_markup(rows)
+
+
+def _edit_fields_text(company_name: str) -> str:
+    labels = "\n".join(f"• {label}" for _, label in COMPANY_EDIT_FIELD_LABELS)
+    return f"✏️ Редактировать: {company_name}\n\nВыберите поле:\n{labels}"
+
+
+def _edit_preview_text(field_label: str, old_value: str | None, new_value: str | None) -> str:
+    return (
+        f"✏️ {field_label}\n\n"
+        f"Старое значение:\n{old_value or 'нет'}\n\n"
+        f"Новое значение:\n{new_value or 'нет'}"
+    )
+
+
+COMPANY_EDIT_FIELD_MAP = dict(COMPANY_EDIT_FIELD_LABELS)
+
+
+def _company_field_value(company, field: str) -> str | None:
+    if field == "display_name":
+        return company.name
+    if field == "email":
+        return next((contact.value for contact in company.contacts if contact.type == ContactType.EMAIL.value), None)
+    if field == "map_url":
+        return company.maps_url
+    return getattr(company, field, None)
+
+
+def _normalize_choice_edit_value(value: str | None, options: dict[str, str]) -> str | None:
+    text = _clean_optional(value)
+    if text is None:
+        return None
+    lowered = text.lower()
+    if lowered in options:
+        return lowered
+    reverse = {label.lower(): raw_value for raw_value, label in options.items()}
+    if lowered in reverse:
+        return reverse[lowered]
+    return text
 
 
 def _search_results_text(companies: list) -> str:
@@ -218,29 +288,39 @@ def _render_handoff_preview(payload: dict) -> str:
     )
 
 
-async def _show_recent_companies(message: Message, *, edit: bool = False) -> None:
+async def _show_recent_companies(message: Message, *, page: int = 0, edit: bool = False) -> None:
     async with async_session_factory() as session:
-        companies = await list_companies(session, limit=15)
+        total = await count_all_companies(session)
+        deleted = await count_deleted_companies(session)
+        active = max(total - deleted, 0)
+        offset = max(page, 0) * COMPANY_LIST_PAGE_SIZE
+        companies = await list_companies(session, limit=COMPANY_LIST_PAGE_SIZE, offset=offset)
 
-    text = "Компаний пока нет." if not companies else "Последние компании:"
+    shown = len(companies)
+    has_prev = page > 0
+    has_next = offset + shown < active
+    text = (
+        "📋 Компании\n\n"
+        f"Всего: {total}\n"
+        f"Активных: {active}\n"
+        f"Deleted/скрытых: {deleted}\n"
+        f"Показано на странице: {shown}\n"
+    )
     if companies:
-        text = f"{text}\n\n" + "\n".join(
+        text += "\n" + "\n".join(
             f"#{company.id} {company.name} — {humanize_company_status(company.status)}"
             for company in companies
         )
+    else:
+        text += "\nКомпаний пока нет."
+
+    markup = company_list_paginated_markup(companies, page=page, has_prev=has_prev, has_next=has_next)
 
     if edit:
-        await _safe_edit_message(
-            message,
-            text,
-            reply_markup=company_list_markup(companies) if companies else None,
-        )
+        await _safe_edit_message(message, text, reply_markup=markup if companies or has_prev or has_next else None)
         return
 
-    await message.answer(
-        text,
-        reply_markup=company_list_markup(companies) if companies else None,
-    )
+    await message.answer(text, reply_markup=markup if companies or has_prev or has_next else None)
 
 
 async def _show_company_card(message: Message, company_id: int, *, edit: bool = False) -> bool:
@@ -788,7 +868,13 @@ async def menu_crm_list_callback(callback: CallbackQuery, state: FSMContext) -> 
     if not callback.message:
         return
     await state.clear()
-    await _show_recent_companies(callback.message, edit=True)
+    page = 0
+    if callback.data and callback.data != "company:list":
+        try:
+            page = int(callback.data.rsplit(":", 1)[-1])
+        except ValueError:
+            page = 0
+    await _show_recent_companies(callback.message, page=page, edit=True)
     await callback.answer()
 
 
@@ -833,7 +919,7 @@ async def menu_leads_companies_callback(callback: CallbackQuery, state: FSMConte
     if not callback.message:
         return
     await state.clear()
-    await _show_recent_companies(callback.message, edit=True)
+    await _show_recent_companies(callback.message, page=0, edit=True)
     await callback.answer()
 
 
@@ -917,14 +1003,22 @@ async def menu_settings_about_callback(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
-@router.callback_query(F.data == "company:list")
+@router.callback_query(F.data.startswith("company:list"))
 async def company_list_callback(callback: CallbackQuery, state: FSMContext) -> None:
     if not callback.message:
         await callback.answer("Не удалось открыть список.")
         return
 
     await state.clear()
-    await _show_recent_companies(callback.message, edit=True)
+    page = 0
+    if callback.data:
+        parts = callback.data.split(":")
+        if len(parts) >= 3:
+            try:
+                page = int(parts[2])
+            except ValueError:
+                page = 0
+    await _show_recent_companies(callback.message, page=page, edit=True)
     await callback.answer()
 
 
@@ -969,6 +1063,125 @@ async def company_card_callback(callback: CallbackQuery, state: FSMContext) -> N
         await callback.answer("Компания не найдена.", show_alert=True)
         return
     await callback.answer()
+
+
+@router.callback_query(F.data.startswith("company:edit:"))
+async def company_edit_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.message:
+        await callback.answer("Не удалось открыть редактирование.", show_alert=True)
+        return
+
+    parts = callback.data.split(":")
+    if len(parts) == 3:
+        company_id = int(parts[2])
+        async with async_session_factory() as session:
+            company = await get_company(session, company_id)
+        if not company:
+            await callback.answer("Компания не найдена.", show_alert=True)
+            return
+        await state.clear()
+        await _safe_edit_message(
+            callback.message,
+            _edit_fields_text(company.name),
+            reply_markup=_edit_fields_markup(company_id),
+        )
+        await callback.answer()
+        return
+
+    if len(parts) == 4:
+        company_id = int(parts[2])
+        field = parts[3]
+        if field not in COMPANY_EDIT_FIELD_MAP:
+            await callback.answer("Поле недоступно.", show_alert=True)
+            return
+        async with async_session_factory() as session:
+            company = await get_company(session, company_id)
+        if not company:
+            await callback.answer("Компания не найдена.", show_alert=True)
+            return
+        await state.clear()
+        await state.update_data(company_id=company_id, field=field)
+        await state.set_state(CompanyEditStates.value)
+        await callback.message.answer(
+            f"Введите новое значение для поля «{COMPANY_EDIT_FIELD_MAP[field]}».\n"
+            "Чтобы очистить поле, отправьте `-`.",
+            reply_markup=flow_menu(),
+        )
+        await callback.answer()
+        return
+
+    if len(parts) >= 5 and parts[2] == "save":
+        company_id = int(parts[3])
+        field = parts[4]
+        data = await state.get_data()
+        raw_value = data.get("edit_raw_value")
+        if field == "status":
+            raw_value = _normalize_choice_edit_value(raw_value, COMPANY_STATUS_LABELS)
+        elif field == "priority":
+            raw_value = _normalize_choice_edit_value(raw_value, PRIORITY_LABELS)
+        try:
+            payload = CompanyManualUpdate(**{field: raw_value})
+            async with async_session_factory() as session:
+                company = await update_company_manual_fields(
+                    session,
+                    company_id,
+                    payload,
+                    user_id=callback.from_user.id if callback.from_user else None,
+                )
+        except (ValueError, ValidationError) as exc:
+            await callback.answer(str(exc), show_alert=True)
+            return
+
+        await state.clear()
+        if not company:
+            await callback.answer("Компания не найдена.", show_alert=True)
+            return
+        await _show_company_card(callback.message, company_id, edit=True)
+        await callback.answer("Изменение сохранено.")
+        return
+
+    if len(parts) >= 4 and parts[2] == "cancel":
+        company_id = int(parts[3])
+        await state.clear()
+        await _show_company_card(callback.message, company_id, edit=True)
+        await callback.answer("Редактирование отменено.")
+        return
+
+    await callback.answer("Не удалось обработать редактирование.", show_alert=True)
+
+
+@router.message(CompanyEditStates.value)
+async def company_edit_value_step(message: Message, state: FSMContext) -> None:
+    data = await state.get_data()
+    company_id = int(data.get("company_id") or 0)
+    field = data.get("field")
+    if not company_id or not field:
+        await state.clear()
+        await message.answer("Сессия редактирования истекла.", reply_markup=main_menu())
+        return
+
+    raw_value = None if _is_skip(message.text) else _clean_optional(message.text)
+    await state.update_data(edit_raw_value=raw_value)
+    await state.set_state(CompanyEditStates.confirm)
+
+    async with async_session_factory() as session:
+        company = await get_company(session, company_id)
+    if not company:
+        await state.clear()
+        await message.answer("Компания не найдена.", reply_markup=main_menu())
+        return
+
+    old_value = _company_field_value(company, field)
+    preview = _edit_preview_text(COMPANY_EDIT_FIELD_MAP[field], old_value, raw_value)
+    markup = simple_menu_markup(
+        [
+            [
+                InlineKeyboardButton(text="✅ Сохранить", callback_data=f"company:edit:save:{company_id}:{field}"),
+                InlineKeyboardButton(text="✖️ Отмена", callback_data=f"company:edit:cancel:{company_id}"),
+            ]
+        ]
+    )
+    await message.answer(preview, reply_markup=markup)
 
 
 @router.callback_query(F.data.startswith("company:call:"))

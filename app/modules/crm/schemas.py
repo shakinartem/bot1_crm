@@ -28,6 +28,7 @@ class CompanyBase(BaseModel):
     region: str | None = None
     phone: str | None = None
     website: str | None = None
+    checko_profile_url: str | None = None
     social_links: str | None = None
     maps_url: str | None = None
     vk_url: str | None = None
@@ -51,6 +52,7 @@ class CompanyCreate(CompanyBase):
 
 class CompanyUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
+    display_name: str | None = Field(default=None, min_length=1, max_length=255)
     legal_name: str | None = None
     inn: str | None = None
     ogrn: str | None = None
@@ -58,9 +60,11 @@ class CompanyUpdate(BaseModel):
     city: str | None = None
     region: str | None = None
     phone: str | None = None
+    email: str | None = None
     website: str | None = None
-    social_links: str | None = None
+    checko_profile_url: str | None = None
     maps_url: str | None = None
+    social_links: str | None = None
     vk_url: str | None = None
     instagram_url: str | None = None
     telegram_url: str | None = None
@@ -71,6 +75,18 @@ class CompanyUpdate(BaseModel):
     status: CompanyStatus | None = None
     priority: LeadPriority | None = None
     notes: str | None = None
+    maps_score: int | None = None
+    website_score: int | None = None
+    digital_score: int | None = None
+    digital_grade: str | None = None
+    maps_confidence: str | None = None
+    website_confidence: str | None = None
+    maps_reviews: int | None = None
+    maps_rating: float | None = None
+
+
+class CompanyManualUpdate(CompanyUpdate):
+    pass
 
 
 class CompanyRead(CompanyBase):
@@ -82,6 +98,14 @@ class CompanyRead(CompanyBase):
     lead_fit_score: int | None = None
     lead_fit_group: str | None = None
     lead_fit_calculated_at: datetime | None = None
+    maps_score: int | None = None
+    website_score: int | None = None
+    digital_score: int | None = None
+    digital_grade: str | None = None
+    maps_confidence: str | None = None
+    website_confidence: str | None = None
+    maps_reviews: int | None = None
+    maps_rating: float | None = None
     deleted_at: datetime | None = None
     deleted_by_user_id: int | None = None
     created_at: datetime
@@ -209,6 +233,7 @@ class Bot2CompanyContext(BaseModel):
     address: str | None = None
     phone: str | None = None
     website: str | None = None
+    checko_profile_url: str | None = None
     maps_url: str | None = None
     vk_url: str | None = None
     instagram_url: str | None = None

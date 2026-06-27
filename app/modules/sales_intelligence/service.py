@@ -62,6 +62,7 @@ async def get_company_sales_context(session: AsyncSession, company_id: int) -> d
     latest_enrichment = await get_latest_enrichment(session, company_id)
     latest_intelligence = await get_latest_intelligence(session, company_id)
     latest_research = await get_latest_research(session, company_id)
+    latest_maps_research = await get_latest_company_insight(session, company_id, "maps_research")
     enrichment_context = await build_enrichment_context_for_company(session, company_id)
     intelligence_context = await build_intelligence_context_for_company(session, company_id)
 
@@ -97,6 +98,7 @@ async def get_company_sales_context(session: AsyncSession, company_id: int) -> d
         latest_enrichment=latest_enrichment,
         latest_intelligence=latest_intelligence,
         latest_research=latest_research,
+        latest_maps_research=latest_maps_research,
     )
 
     return {
@@ -109,6 +111,7 @@ async def get_company_sales_context(session: AsyncSession, company_id: int) -> d
         "latest_intelligence": _model_dump(latest_intelligence),
         "latest_intelligence_context": _model_dump(intelligence_context),
         "latest_research": _model_dump(latest_research),
+        "latest_maps_research": safe_load_payload(latest_maps_research) if latest_maps_research else None,
         "latest_research_job_result": research_job_result,
         "recent_interactions": [_serialize_interaction(item) for item in recent_interactions],
         "open_tasks": [_serialize_task(item) for item in open_tasks],
@@ -116,6 +119,7 @@ async def get_company_sales_context(session: AsyncSession, company_id: int) -> d
         "website": scoring_context["website"],
         "socials": scoring_context["socials"],
         "maps": scoring_context["maps"],
+        "maps_research": scoring_context.get("maps_research"),
         "trust": scoring_context["trust"],
         "contacts_normalized": scoring_context["contacts"],
         "niche_detected": niche_detected,
@@ -705,6 +709,7 @@ def _build_scoring_context(
     latest_enrichment: BaseModel | None,
     latest_intelligence: BaseModel | None,
     latest_research: BaseModel | None,
+    latest_maps_research: BaseModel | None,
 ) -> dict[str, Any]:
     all_phones = _dedupe_preserve_order(
         [company.phone, *_pluck(contacts, "value", contact_type="phone"), *_model_list(latest_intelligence, "parsed_contacts", "phones"), *_model_list(latest_enrichment, "detected_contacts", "phones")]
@@ -754,6 +759,8 @@ def _build_scoring_context(
             *_model_list(latest_intelligence, "parsed_socials", "yandex_maps_links"),
             *_model_list(latest_intelligence, "parsed_socials", "two_gis_links"),
             *_flatten_mapping_values(_model_dump_field(latest_enrichment, "detected_maps")),
+            _model_dump_field(latest_maps_research, "yandex_maps_url"),
+            _model_dump_field(latest_maps_research, "selected_url"),
         ]
     )
     map_platforms = _dedupe_preserve_order(
@@ -765,6 +772,7 @@ def _build_scoring_context(
     )
     intelligence_signals = _model_dump_field(latest_intelligence, "parsed_signals")
     enrichment_signals = _model_dump_field(latest_enrichment, "signals")
+    maps_research = _model_dump(latest_maps_research) if latest_maps_research else None
     title_text = " ".join(
         item
         for item in [
@@ -833,7 +841,10 @@ def _build_scoring_context(
             "has_photos": bool(company.reviews_count and company.reviews_count >= 20),
             "has_description": bool(_model_dump_field(latest_enrichment, "meta_description")),
             "has_services": website["has_services"],
+            "research_status": _model_dump_field(latest_maps_research, "status"),
+            "research_score": _model_dump_field(latest_maps_research, "total_score"),
         },
+        "maps_research": maps_research,
         "trust": {
             "has_decision_maker": bool(decision_makers),
             "has_legal_identifiers": bool(company.inn or company.ogrn or company.legal_name),

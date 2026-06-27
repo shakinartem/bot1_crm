@@ -216,3 +216,26 @@ def _limit_unique(items: list[str], limit: int) -> list[str]:
         if len(result) >= limit:
             break
     return result
+
+
+def compute_website_score(url: str, signals: "WebsiteSignalRead", html_length: int) -> int:
+    score = 0
+    if url.lower().startswith("https://"):
+        score += 10
+    if html_length > 1000:
+        score += 10
+    if signals.has_contacts_page:
+        score += 10
+    if signals.has_online_booking or signals.has_callback_form:
+        score += 20
+    if signals.has_social_links:
+        score += 15
+    if signals.has_prices:
+        score += 10
+    if signals.has_doctors_page:
+        score += 10
+    if signals.has_reviews_section:
+        score += 10
+    if signals.has_privacy_policy:
+        score += 5
+    return max(0, min(100, score))

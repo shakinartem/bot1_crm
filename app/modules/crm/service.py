@@ -16,12 +16,13 @@ from app.modules.crm.constants import (
     INTERACTION_TYPE_LABELS,
     PRIORITY_LABELS,
     CompanyStatus,
+    ContactType,
     InteractionResult,
     InteractionType,
     LeadPriority,
     TaskStatus,
 )
-from app.modules.crm.models import Company, ContactPoint, DecisionMaker, FollowUpTask, LeadInteraction
+from app.modules.crm.models import AuditLog, Company, ContactPoint, DecisionMaker, FollowUpTask, LeadInteraction
 from app.modules.crm.schemas import (
     Bot2AssignmentContext,
     Bot2CompanyContext,
@@ -34,6 +35,7 @@ from app.modules.crm.schemas import (
     Bot2TaskContext,
     CitySummary,
     CompanyCreate,
+    CompanyManualUpdate,
     RegionSummary,
     CompanyUpdate,
     ContactPointCreate,
@@ -43,6 +45,8 @@ from app.modules.crm.schemas import (
     InteractionCreate,
 )
 from app.modules.users.service import build_display_name
+from app.modules.legal_discovery.checko_parser import is_real_checko_profile_url
+from app.modules.research.phone_parser import normalize_phone_ru
 
 
 CALL_RESULT_STATUS_MAP = {
@@ -116,6 +120,34 @@ async def list_companies(
 
     result = await session.execute(stmt)
     return list(result.scalars().all())
+
+
+async def count_companies(
+    session: AsyncSession,
+    *,
+    status: str | None = None,
+    city: str | None = None,
+    priority: str | None = None,
+) -> int:
+    stmt = select(func.count(Company.id)).where(Company.deleted_at.is_(None))
+    if status:
+        stmt = stmt.where(Company.status == status)
+    if city:
+        stmt = stmt.where(Company.city == city)
+    if priority:
+        stmt = stmt.where(Company.priority == priority)
+    result = await session.execute(stmt)
+    return int(result.scalar_one() or 0)
+
+
+async def count_all_companies(session: AsyncSession) -> int:
+    result = await session.execute(select(func.count(Company.id)))
+    return int(result.scalar_one() or 0)
+
+
+async def count_deleted_companies(session: AsyncSession) -> int:
+    result = await session.execute(select(func.count(Company.id)).where(Company.deleted_at.is_not(None)))
+    return int(result.scalar_one() or 0)
 
 
 async def get_company_regions(session: AsyncSession) -> list[RegionSummary]:
@@ -233,15 +265,137 @@ async def get_company_full_context(session: AsyncSession, company_id: int) -> Co
     return await get_company(session, company_id)
 
 
-async def update_company(session: AsyncSession, company_id: int, payload: CompanyUpdate) -> Company | None:
+async def update_company(session: AsyncSession, company_id: int, payload: CompanyManualUpdate) -> Company | None:
+    company = await get_company(session, company_id)
+    if not company:
+        return None
+    await update_company_manual_fields(session, company_id, payload, user_id=None)
+    return await get_company(session, company_id)
+
+
+async def update_company_manual_fields(
+    session: AsyncSession,
+    company_id: int,
+    payload: CompanyManualUpdate,
+    user_id: int | None,
+) -> Company | None:
     company = await get_company(session, company_id)
     if not company:
         return None
 
-    for field, value in payload.model_dump(exclude_unset=True).items():
-        setattr(company, field, value)
+    data = payload.model_dump(exclude_unset=True)
+    changes: list[tuple[str, str | None, str | None]] = []
 
+    def track_change(field_name: str, old_value: str | None, new_value: str | None) -> None:
+        if (old_value or "") != (new_value or ""):
+            changes.append((field_name, old_value, new_value))
+
+    if "display_name" in data:
+        new_value = _clean_manual_text(data.pop("display_name"))
+        track_change("name", company.name, new_value)
+        company.name = new_value or company.name
+        if new_value is None:
+            raise ValueError("Company name cannot be empty")
+
+    if "name" in data:
+        new_value = _clean_manual_text(data.pop("name"))
+        if not new_value:
+            raise ValueError("Company name cannot be empty")
+        track_change("name", company.name, new_value)
+        company.name = new_value
+
+    if "legal_name" in data:
+        new_value = _clean_manual_text(data.pop("legal_name"))
+        track_change("legal_name", company.legal_name, new_value)
+        company.legal_name = new_value
+
+    if "city" in data:
+        new_value = _clean_manual_text(data.pop("city"))
+        track_change("city", company.city, new_value)
+        company.city = new_value
+
+    if "region" in data:
+        new_value = _clean_manual_text(data.pop("region"))
+        track_change("region", company.region, new_value)
+        company.region = new_value
+
+    if "address" in data:
+        new_value = _clean_manual_text(data.pop("address"))
+        track_change("address", company.address, new_value)
+        company.address = new_value
+
+    if "website" in data:
+        new_value = _normalize_manual_website(data.pop("website"))
+        track_change("website", company.website, new_value)
+        company.website = new_value
+
+    if "checko_profile_url" in data:
+        new_value = _normalize_checko_profile_url(data.pop("checko_profile_url"))
+        track_change("checko_profile_url", company.checko_profile_url, new_value)
+        company.checko_profile_url = new_value
+
+    if "map_url" in data:
+        new_value = _normalize_map_url(data.pop("map_url"))
+        track_change("maps_url", company.maps_url, new_value)
+        company.maps_url = new_value
+
+    if "maps_url" in data:
+        new_value = _normalize_map_url(data.pop("maps_url"))
+        track_change("maps_url", company.maps_url, new_value)
+        company.maps_url = new_value
+
+    if "phone" in data:
+        new_value = _normalize_phone_value(data.pop("phone"))
+        track_change("phone", company.phone, new_value)
+        company.phone = new_value
+
+    if "status" in data:
+        new_value = _normalize_status_value(data.pop("status"))
+        if new_value is None:
+            raise ValueError("Status cannot be empty")
+        track_change("status", company.status, new_value)
+        company.status = new_value
+
+    if "priority" in data:
+        new_value = _normalize_priority_value(data.pop("priority"))
+        if new_value is None:
+            raise ValueError("Priority cannot be empty")
+        track_change("priority", company.priority, new_value)
+        company.priority = new_value
+
+    if "notes" in data:
+        new_value = _clean_manual_text(data.pop("notes"))
+        track_change("notes", company.notes, new_value)
+        company.notes = new_value
+
+    if "email" in data:
+        new_value = _normalize_email_value(data.pop("email"))
+        old_value = _first_contact_value(company, ContactType.EMAIL.value)
+        await _replace_company_contact_value(session, company.id, ContactType.EMAIL.value, new_value, label="manual_edit")
+        track_change("email", old_value, new_value)
+
+    if "source" in data:
+        new_value = _clean_manual_text(data.pop("source"))
+        track_change("source", company.source, new_value)
+        company.source = new_value
+
+    if data:
+        raise ValueError(f"Unsupported fields: {', '.join(sorted(data))}")
+
+    company.updated_by_user_id = user_id or company.updated_by_user_id
     session.add(company)
+    if changes:
+        for field_name, old_value, new_value in changes:
+            session.add(
+                AuditLog(
+                    company_id=company.id,
+                    user_id=user_id,
+                    action="manual_edit",
+                    field_name=field_name,
+                    old_value=old_value,
+                    new_value=new_value,
+                )
+            )
     await session.commit()
     await session.refresh(company)
     return company
@@ -631,6 +785,68 @@ async def update_task(session: AsyncSession, task_id: int, payload: FollowUpTask
     await session.commit()
     await session.refresh(task)
     return task
+
+
+async def _log_touch_workflow(
+    session: AsyncSession,
+    company_id: int,
+    result: str | None = None,
+    comment: str | None = None,
+    next_due_at: datetime | None = None,
+    user_id: int | None = None,
+) -> FollowUpTask | None:
+    interaction_result = InteractionResult.OTHER.value
+    if result == "contact_made":
+        interaction_result = InteractionResult.INTERESTED.value
+    elif result == "no_answer":
+        interaction_result = InteractionResult.NO_ANSWER.value
+
+    summary = "Касание: "
+    if result == "contact_made":
+        summary += "Дозвонился / есть контакт"
+    elif result == "no_answer":
+        summary += "Не дозвонился"
+    else:
+        summary += "Заметка"
+    if comment:
+        summary += f". {comment}"
+
+    interaction = LeadInteraction(
+        company_id=company_id,
+        type=InteractionType.CALL.value if result == "contact_made" else InteractionType.NOTE.value,
+        result=interaction_result,
+        summary=summary,
+        next_action="Следующее касание" if next_due_at else None,
+        next_action_at=next_due_at,
+        created_by="telegram",
+        created_by_user_id=user_id,
+    )
+    session.add(interaction)
+
+    tasks = await get_company_open_tasks(session, company_id)
+    completed = None
+    if tasks:
+        completed = tasks[0]
+        completed.status = TaskStatus.DONE.value
+        completed.completed_at = datetime.now()
+        session.add(completed)
+
+    next_task = None
+    if next_due_at:
+        next_task = FollowUpTask(
+            company_id=company_id,
+            title="Следующее касание (7-touch workflow)",
+            description=comment,
+            due_at=next_due_at,
+            due_date=next_due_at,
+            status=TaskStatus.OPEN.value,
+            priority=LeadPriority.MEDIUM.value,
+            assigned_user_id=user_id,
+        )
+        session.add(next_task)
+
+    await session.commit()
+    return completed or next_task
 
 
 async def complete_task(session: AsyncSession, task_id: int) -> FollowUpTask | None:
@@ -1026,6 +1242,151 @@ def normalize_call_result(value: str) -> str:
     return value.strip().lower()
 
 
+def _clean_manual_text(value: str | None) -> str | None:
+    text = (value or "").strip()
+    if not text or text == "-":
+        return None
+    return text
+
+
+def _normalize_phone_value(value: str | None) -> str | None:
+    text = _clean_manual_text(value)
+    if text is None:
+        return None
+    normalized = normalize_phone_ru(text)
+    if not normalized:
+        raise ValueError("Invalid phone number")
+    return normalized
+
+
+def _normalize_email_value(value: str | None) -> str | None:
+    text = _clean_manual_text(value)
+    if text is None:
+        return None
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", text):
+        raise ValueError("Invalid email")
+    return text.lower()
+
+
+def _normalize_manual_website(value: str | None) -> str | None:
+    text = _clean_manual_text(value)
+    if text is None:
+        return None
+    from app.modules.research.website_resolver import is_denied_website_url, normalize_website_url
+
+    normalized = normalize_website_url(text)
+    if is_denied_website_url(normalized):
+        raise ValueError("Denied website URL")
+    return normalized
+
+
+def _normalize_checko_profile_url(value: str | None) -> str | None:
+    text = _clean_manual_text(value)
+    if text is None:
+        return None
+    if not is_real_checko_profile_url(text):
+        raise ValueError("Invalid Checko profile URL")
+    return text
+
+
+def _normalize_map_url(value: str | None) -> str | None:
+    text = _clean_manual_text(value)
+    if text is None:
+        return None
+    normalized = text if "://" in text else f"https://{text}"
+    lowered = normalized.lower()
+    if any(domain in lowered for domain in ["2gis.ru", "yandex.ru/maps", "yandex.com/maps", "maps.google.com", "google.com/maps"]):
+        return normalized
+    if "maps" in lowered:
+        return normalized
+    raise ValueError("Invalid map URL")
+
+
+def _normalize_status_value(value: str | None) -> str | None:
+    text = _clean_manual_text(value)
+    if text is None:
+        return None
+    normalized = text.strip().lower()
+    label_to_value = {label.lower(): raw_value for raw_value, label in COMPANY_STATUS_LABELS.items()}
+    if normalized in COMPANY_STATUS_LABELS:
+        return normalized
+    if normalized in label_to_value:
+        return label_to_value[normalized]
+    raise ValueError("Invalid status")
+
+
+def _normalize_priority_value(value: str | None) -> str | None:
+    text = _clean_manual_text(value)
+    if text is None:
+        return None
+    normalized = text.strip().lower()
+    label_to_value = {label.lower(): raw_value for raw_value, label in PRIORITY_LABELS.items()}
+    if normalized in PRIORITY_LABELS:
+        return normalized
+    if normalized in label_to_value:
+        return label_to_value[normalized]
+    raise ValueError("Invalid priority")
+
+
+async def _replace_company_contact_value(
+    session: AsyncSession,
+    company_id: int,
+    contact_type: str,
+    value: str | None,
+    *,
+    label: str | None = None,
+) -> None:
+    result = await session.execute(
+        select(ContactPoint).where(ContactPoint.company_id == company_id, ContactPoint.type == contact_type)
+    )
+    for item in result.scalars().all():
+        await session.delete(item)
+    if not value:
+        return
+    session.add(
+        ContactPoint(
+            company_id=company_id,
+            type=contact_type,
+            value=value,
+            label=label,
+            is_primary=True,
+        )
+    )
+
+
+def _first_contact_value(company: Company, contact_type: str) -> str | None:
+    for contact in company.contacts:
+        if contact.type == contact_type:
+            return contact.value
+    return None
+
+
+def _build_manual_edit_note(changes: list[tuple[str, str | None, str | None]], *, user_id: int | None) -> str:
+    user_part = f" by user_id={user_id}" if user_id is not None else ""
+    parts = [f"{field}: {old or '—'} -> {new or '—'}" for field, old, new in changes[:5]]
+    return f"Manual edit{user_part}; " + "; ".join(parts)
+
+
+def _shorten_url(url: str | None, limit: int = 64) -> str:
+    value = (url or "").strip()
+    if not value:
+        return "нет"
+    if len(value) <= limit:
+        return value
+    return f"{value[: limit - 3].rstrip()}..."
+
+
+def _format_link_section(title: str, items: list[tuple[str, str | None]]) -> str:
+    lines = [f"{title}:"]
+    visible = [(label, value) for label, value in items if value]
+    if not visible:
+        lines.append("нет")
+        return "\n".join(lines)
+    for label, value in visible:
+        lines.append(f"- {label}: {_shorten_url(value)}")
+    return "\n".join(lines)
+
+
 def suggest_next_task_title(result: str) -> str:
     normalized = normalize_call_result(result)
     suggestions = {
@@ -1141,7 +1502,14 @@ def format_company_card(company: Company) -> str:
         f"Город: {escape(company.city or 'нет')}\n"
         f"Адрес: {escape(company.address or 'нет')}\n"
         f"Телефон: {escape(company.phone or 'нет')}\n"
-        f"Сайт: {escape(company.website or 'нет')}\n\n"
+        f"Email: {escape(next((contact.value for contact in contacts if contact.type == ContactType.EMAIL.value), 'нет'))}\n"
+        f"ЛПР телефон: {escape(next((contact.value for contact in contacts if contact.type == ContactType.PHONE.value), 'нет'))}\n"
+        f"Сайт компании: {escape(_shorten_url(company.website))}\n"
+        f"Checko: {escape(_shorten_url(company.checko_profile_url))}\n"
+        f"Карты: {escape(_shorten_url(company.maps_url))}\n\n"
+        f"Соцсети: VK={escape(_shorten_url(company.vk_url))}, "
+        f"Instagram={escape(_shorten_url(company.instagram_url))}, "
+        f"Telegram={escape(_shorten_url(company.telegram_url))}\n\n"
         f"Статус: {escape(humanize_company_status(company.status))}\n"
         f"Приоритет: {escape(humanize_priority(company.priority))}\n"
         f"Источник: {escape(company.source or 'не указан')}\n\n"

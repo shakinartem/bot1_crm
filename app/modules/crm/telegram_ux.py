@@ -290,6 +290,25 @@ def render_website_research_result(outcome, company: Company) -> str:
     return clamp_text("\n".join(lines))
 
 
+def render_maps_research_result(score, company: Company) -> str:
+    lines = ["🗺 Maps research", ""]
+    lines.append(f"Статус: {getattr(score, 'status', 'unknown')}")
+    lines.append(f"Компания: {company.name}")
+    if getattr(score, "total_score", None) is not None:
+        lines.append(f"Score: {getattr(score, 'total_score')}/100")
+    if getattr(score, "yandex_maps_url", None):
+        lines.append(f"Карты: {getattr(score, 'yandex_maps_url')}")
+    if getattr(score, "matched_fields", None):
+        lines.append(f"Совпадения: {shorten_text(', '.join(getattr(score, 'matched_fields')), 180)}")
+    if getattr(score, "reasons", None):
+        lines.append(f"Причины: {shorten_text(getattr(score, 'reasons')[0], 180)}")
+    if getattr(score, "warnings", None):
+        lines.append(f"Предупреждение: {shorten_text(getattr(score, 'warnings')[0], 180)}")
+    if getattr(score, "yandex_maps_url", None) and company.maps_url == getattr(score, "yandex_maps_url"):
+        lines.append("Ссылка сохранена в карточку.")
+    return clamp_text("\n".join(lines))
+
+
 def render_company_card_sections(
     base_text: str,
     lead_fit: LeadFitScore | None,

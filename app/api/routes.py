@@ -31,7 +31,7 @@ from app.modules.crm.schemas import (
     Bot2ConsultationResultCreate,
     CompanyCreate,
     CompanyRead,
-    CompanyUpdate,
+    CompanyManualUpdate,
     DecisionMakerCreate,
     DecisionMakerRead,
     FollowUpTaskCreate,
@@ -50,6 +50,12 @@ from app.modules.digest.service import (
     get_today_tasks,
 )
 from app.modules.exports.service import ExportFilters, export_companies_to_csv
+from app.modules.imports.csv_company_import import (
+    CsvCompanyImportResult,
+    CsvPreviewResult,
+    import_companies_from_csv as import_companies_csv,
+    preview_csv,
+)
 from app.modules.imports.service import import_companies_from_csv, preview_companies_from_csv, save_import_file
 from app.modules.insights.schemas import CompanyInsightSnapshotRead
 from app.modules.insights.service import (
@@ -118,6 +124,8 @@ from app.modules.proposals.service import (
 )
 from app.modules.research.schemas import ResearchResultRead, ResearchRunRequest
 from app.modules.research.service import get_latest_research, get_research_history, run_company_research
+from app.modules.research.maps_research import run_yandex_maps_research_for_company
+from app.modules.research.schemas import MapsScore
 from app.modules.research.website_resolver import WebsiteSearchOutcome, run_website_search_for_company
 from app.modules.research_queue.schemas import (
     ResearchBatchRunRequest,
@@ -358,6 +366,18 @@ async def company_website_research_latest(
     if not snapshot:
         raise HTTPException(status_code=404, detail="Website research snapshot not found")
     return serialize_company_insight_snapshot(snapshot)
+
+
+@api_router.post("/companies/{company_id}/research/maps", response_model=MapsScore)
+async def company_maps_research(
+    company_id: int,
+    payload: WebsiteResearchRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        return await run_yandex_maps_research_for_company(session, company_id, force=payload.force)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @api_router.get("/companies/export")
@@ -971,7 +991,7 @@ async def company_research_history(
 @api_router.patch("/companies/{company_id}", response_model=CompanyRead)
 async def update_company(
     company_id: int,
-    payload: CompanyUpdate,
+    payload: CompanyManualUpdate,
     session: AsyncSession = Depends(get_session),
 ):
     company = await crm_service.update_company(session, company_id, payload)
@@ -1140,61 +1160,60 @@ async def update_task(
     return task
 
 
-@api_router.post("/imports/csv")
-async def import_csv(
+@api_router.post("/companies/import/csv/preview", response_model=dict)
+async def companies_import_csv_preview(
     file: UploadFile,
-    mode: str = Query(default="preview", pattern="^(preview|commit)$"),
-    import_mode: str = Query(default="skip", pattern="^(skip|update)$"),
-    session: AsyncSession = Depends(get_session),
 ):
+    """Preview CSV import: returns detected columns, sample rows, and warnings."""
     content = await file.read()
-    saved_path = save_import_file(content, file.filename)
-    if mode == "commit":
-        return await import_companies_from_csv(
+    preview = preview_csv(content)
+    return {
+        "detected_columns": preview.detected_columns,
+        "total_rows": preview.total_rows,
+        "sample_rows": preview.sample_rows,
+        "inn_count": preview.inn_count,
+        "phone_count": preview.phone_count,
+        "website_count": preview.website_count,
+        "warnings": preview.warnings,
+        "can_import": preview.can_import,
+    }
+
+
+@api_router.post("/companies/import/csv", response_model=dict)
+async def companies_import_csv(
+    file: UploadFile,
+    mode: str = Query(default="upsert", pattern="^(create_only|update_existing|upsert)$"),
+    source: str = Query(default="api_upload"),
+):
+    """Import companies from CSV file. Supports create_only, update_existing, upsert modes."""
+    content = await file.read()
+    async with async_session_factory() as session:
+        result = await import_companies_csv(
             session,
             content,
-            file_name=file.filename,
-            file_path=str(saved_path),
-            import_mode=import_mode,
+            mode=mode,  # type: ignore[arg-type]
+            source=source,
         )
-    return await preview_companies_from_csv(
-        session,
-        content,
-        file_name=file.filename,
-        file_path=str(saved_path),
-    )
-
-
-@api_router.post("/imports/csv/preview")
-async def import_csv_preview(
-    file: UploadFile,
-    session: AsyncSession = Depends(get_session),
-):
-    content = await file.read()
-    saved_path = save_import_file(content, file.filename)
-    return await preview_companies_from_csv(
-        session,
-        content,
-        file_name=file.filename,
-        file_path=str(saved_path),
-    )
-
-
-@api_router.post("/imports/csv/commit")
-async def import_csv_commit(
-    file: UploadFile,
-    import_mode: str = Query(default="skip", pattern="^(skip|update)$"),
-    session: AsyncSession = Depends(get_session),
-):
-    content = await file.read()
-    saved_path = save_import_file(content, file.filename)
-    return await import_companies_from_csv(
-        session,
-        content,
-        file_name=file.filename,
-        file_path=str(saved_path),
-        import_mode=import_mode,
-    )
+    return {
+        "total_rows": result.total_rows,
+        "imported_count": result.imported_count,
+        "updated_count": result.updated_count,
+        "duplicate_count": result.duplicate_count,
+        "skipped_count": result.skipped_count,
+        "error_count": result.error_count,
+        "warnings": result.warnings[:10],
+        "row_results": [
+            {
+                "row_number": r.row_number,
+                "status": r.status,
+                "company_id": r.company_id,
+                "inn": r.inn,
+                "legal_name": r.legal_name,
+                "message": r.message,
+            }
+            for r in result.row_results[:10]
+        ],
+    }
 
 
 @api_router.post("/companies/{company_id}/ai/call-prep")

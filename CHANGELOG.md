@@ -2,12 +2,28 @@
 
 ## Unreleased
 
+- Added CSV company import module with column mapping, encoding detection, and header normalization.
+- Added Telegram CSV upload flow with preview, 3 import modes (create_only, update_existing, upsert), and lead groups summary.
+- Added API CSV import endpoints: POST /api/companies/import/csv/preview and POST /api/companies/import/csv.
+- Improved website search strategy: primary query is now "{INN} {company_name} сайт" instead of generic "{INN} официальный сайт".
+- Improved Yandex Maps search strategy: primary query is now "{company_name} {address}" with stricter scoring requiring ≥2 strong signals.
+- Added checko_profile_url recognition and storage separate from website during CSV import.
+- Added yandex_maps_url recognition and storage as contact point during CSV import.
+- Added CSV import smoke tests (16 tests) covering UTF-8, CP1251, headers, column mapping, deduplication, and edge cases.
+- Added CSV import API smoke test.
+- Added Telegram CSV import smoke test with preview/render <=3500 chars validation.
+- Updated website resolver and maps research smoke tests to verify new query strategies and scoring.
 - Cleaned up live Telegram discovery to a single "🔍 Поиск компаний" entrypoint and removed visible Mock / Dev from live UX.
 - Added page-based legal discovery cursors with next-batch/restart flow and updated preview counters.
 - Added CRM/all_data reset modes, reset confirmations, and debug-file cleanup with users preserved by default.
 - Added Telegram system status and read-only search settings screens.
 - Added smoke coverage for discovery cursor, settings, and reset cleanup.
 - Added website denylist and website health checks.
+- Expanded the website denylist to include common directory, map, and verification domains and protected the official website field from denied URLs.
+- Stored Checko profile URLs separately from official company websites.
+- Added Yandex Maps research scoring and Telegram/API entrypoints.
+- Added Telegram company-card manual edit flow and paginated company lists.
+- Added smoke scripts for denylist quality, maps research, manual edit, and company card rendering.
 - Added Yandex website search foundation by INN/OGRN/name+city.
 - Improved Russian phone normalization and extraction.
 - Added post-import lead fit scoring and group persistence.

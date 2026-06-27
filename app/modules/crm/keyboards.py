@@ -23,6 +23,12 @@ CALL_RESULT_OPTIONS = [
     ("Другое", "other"),
 ]
 
+TOUCH_RESULT_OPTIONS = [
+    ("✅ Дозвонился / есть контакт", "contact_made"),
+    ("❌ Не дозвонился", "no_answer"),
+    ("📝 Заметка", "note"),
+]
+
 
 def main_menu() -> ReplyKeyboardMarkup:
     rows = [
@@ -157,6 +163,10 @@ def company_actions(company_id: int) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="🧠 Website research", callback_data=f"leadfit:website:{company_id}"),
             ],
             [
+                InlineKeyboardButton(text="🗺 Найти карты", callback_data=f"maps:research:{company_id}"),
+                InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"company:edit:{company_id}"),
+            ],
+            [
                 InlineKeyboardButton(text="📅 План 7 касаний", callback_data=f"touch:open:{company_id}"),
                 InlineKeyboardButton(text="🗑 Удалить компанию", callback_data=f"company:delete:{company_id}"),
             ],
@@ -200,6 +210,28 @@ def company_list_markup(companies: list[Any]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def company_list_paginated_markup(
+    companies: list[Any],
+    *,
+    page: int,
+    has_prev: bool,
+    has_next: bool,
+) -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton(text=f"#{company.id} {company.name[:28]}", callback_data=f"company:open:{company.id}")]
+        for company in companies
+    ]
+    nav_row: list[InlineKeyboardButton] = []
+    if has_prev:
+        nav_row.append(InlineKeyboardButton(text="⬅️ Назад", callback_data=f"company:list:{page - 1}"))
+    if has_next:
+        nav_row.append(InlineKeyboardButton(text="➡️ Далее", callback_data=f"company:list:{page + 1}"))
+    if nav_row:
+        rows.append(nav_row)
+    rows.append([InlineKeyboardButton(text="⬅️ К CRM", callback_data="menu:crm:list")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def lead_group_companies_markup(companies: list[Any], group: str, page: int, has_next_page: bool) -> InlineKeyboardMarkup:
     rows = [
         [InlineKeyboardButton(text=f"#{company.id} {company.name[:28]}", callback_data=f"company:open:{company.id}")]
@@ -227,6 +259,15 @@ def stats_company_list_markup(companies: list[Any]) -> InlineKeyboardMarkup:
 def call_results_markup(company_id: int) -> InlineKeyboardMarkup:
     rows = [[InlineKeyboardButton(text=label, callback_data=f"call:pick:{company_id}:{code}")] for label, code in CALL_RESULT_OPTIONS]
     rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data=f"company:open:{company_id}")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def touch_results_markup(company_id: int, back_callback: str = "touch:open") -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton(text=label, callback_data=f"touch:result:{company_id}:{code}")]
+        for label, code in TOUCH_RESULT_OPTIONS
+    ]
+    rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data=f"{back_callback}:{company_id}")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -310,9 +351,10 @@ def touch_plan_markup(company_id: int, *, has_plan: bool, current_task_id: int |
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="✅ Отметить касание выполненным", callback_data=f"touch:done:{current_task_id or 0}")],
-            [InlineKeyboardButton(text="➕ Записать касание", callback_data=f"touch:note:{company_id}")],
-            [InlineKeyboardButton(text="▶️ Следующее касание", callback_data=f"touch:open:{company_id}")],
-            [InlineKeyboardButton(text="📅 Открытые задачи", callback_data=f"touch:tasks:{company_id}")],
+            [InlineKeyboardButton(text="📞 Новое касание", callback_data=f"touch:log:{company_id}")],
+            [InlineKeyboardButton(text="➕ Заметка", callback_data=f"touch:note:{company_id}")],
+            [InlineKeyboardButton(text="▶️ План", callback_data=f"touch:open:{company_id}")],
+            [InlineKeyboardButton(text="📅 Задачи", callback_data=f"touch:tasks:{company_id}")],
             [InlineKeyboardButton(text="⬅️ Назад", callback_data=f"company:open:{company_id}")],
         ]
     )

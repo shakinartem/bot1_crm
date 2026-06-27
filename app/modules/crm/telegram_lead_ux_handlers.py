@@ -25,6 +25,7 @@ from app.modules.crm.keyboards import (
     touch_plan_markup,
 )
 from app.modules.crm.service import (
+    _log_touch_workflow,
     complete_task,
     delete_company,
     format_datetime,
@@ -32,15 +33,17 @@ from app.modules.crm.service import (
     get_company_open_tasks,
     get_task,
     get_task_dashboard,
+    parse_due_at_input,
     snooze_task,
 )
-from app.modules.crm.states import AdminResetStates, CompanyNoteStates
+from app.modules.crm.states import AdminResetStates, CompanyNoteStates, TouchWorkflowStates
 from app.modules.crm.telegram_ux import (
     LIST_PREVIEW_LIMIT,
     TELEGRAM_TEXT_LIMIT,
     build_system_status_snapshot,
     clamp_text,
     is_admin_telegram_id,
+    render_maps_research_result,
     render_admin_reset_disabled,
     render_admin_reset_prompt,
     render_admin_reset_result,
@@ -62,6 +65,7 @@ from app.modules.lead_fit.service import (
     recalculate_company_lead_fit,
     summarize_lead_fit_groups,
 )
+from app.modules.research.maps_research import run_yandex_maps_research_for_company
 from app.modules.research.website_resolver import run_website_search_for_company
 from app.modules.users.service import build_display_name, get_user_tasks
 from app.utils.telegram import get_current_crm_user
@@ -314,6 +318,26 @@ async def website_research_callback(callback: CallbackQuery) -> None:
     await callback.answer("Website research выполнен.")
 
 
+@router.callback_query(F.data.startswith("maps:research:"))
+async def maps_research_callback(callback: CallbackQuery) -> None:
+    if not callback.message:
+        await callback.answer("Не удалось запустить research.", show_alert=True)
+        return
+    company_id = int(callback.data.rsplit(":", 1)[-1])
+    try:
+        async with async_session_factory() as session:
+            score = await run_yandex_maps_research_for_company(session, company_id, force=True)
+            company = await get_company(session, company_id)
+    except Exception:
+        await callback.answer("Maps research завершился с ошибкой.", show_alert=True)
+        return
+    if not company:
+        await callback.answer("Компания не найдена.", show_alert=True)
+        return
+    await callback.message.answer(render_maps_research_result(score, company))
+    await callback.answer("Maps research выполнен.")
+
+
 @router.callback_query(F.data.startswith("touch:open:"))
 async def touch_plan_open_callback(callback: CallbackQuery) -> None:
     if not callback.message:
@@ -355,6 +379,107 @@ async def touch_plan_done_callback(callback: CallbackQuery) -> None:
         return
     await _show_touch_plan(callback.message, task.company_id, edit=True)
     await callback.answer("Касание отмечено выполненным.")
+
+
+@router.callback_query(F.data.startswith("touch:log:"))
+async def touch_log_start_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.message:
+        await callback.answer("Не удалось начать касание.", show_alert=True)
+        return
+    company_id = int(callback.data.rsplit(":", 1)[-1])
+    async with async_session_factory() as session:
+        company = await get_company(session, company_id)
+    if not company:
+        await callback.answer("Компания не найдена.", show_alert=True)
+        return
+    text = f"📞 <b>Новое касание:</b>\n{escape(company.name)}\n\nРезультат:"
+    markup = touch_results_markup(company_id, back_callback="touch:open")
+    await _safe_edit_message(callback.message, text, reply_markup=markup, parse_mode="HTML")
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("touch:result:"))
+async def touch_result_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.message:
+        await callback.answer("Не удалось обработать результат.", show_alert=True)
+        return
+    company_id = int(callback.data.split(":")[2])
+    result_code = callback.data.split(":")[3]
+    await state.clear()
+    await state.update_data(touch_company_id=company_id, touch_result=result_code)
+    if result_code == "note":
+        await state.set_state(TouchWorkflowStates.entering_comment)
+        await callback.message.answer(
+            "📝 Введите комментарий к касанию.",
+            reply_markup=flow_menu(allow_skip=True),
+        )
+    else:
+        await state.set_state(TouchWorkflowStates.entering_next_date)
+        await callback.message.answer(
+            "📅 Укажите дату следующего касания (через сколько дней или ДД.ММ.ГГГГ ЧЧ:ММ).",
+            reply_markup=flow_menu(allow_skip=True),
+        )
+    await callback.answer()
+
+
+@router.message(TouchWorkflowStates.entering_comment)
+async def touch_comment_message(message: Message, state: FSMContext) -> None:
+    text = (message.text or "").strip()
+    if text == CANCEL_TEXT:
+        await state.clear()
+        await message.answer("Отменено.", reply_markup=main_menu())
+        return
+    data = await state.get_data()
+    company_id = data.get("touch_company_id")
+    if not company_id:
+        await state.clear()
+        await message.answer("Сессия истекла.", reply_markup=main_menu())
+        return
+    comment = text if text != SKIP_TEXT else None
+    await state.update_data(touch_comment=comment)
+    await state.set_state(TouchWorkflowStates.entering_next_date)
+    await message.answer(
+        "📅 Укажите дату следующего касания (например: завтра, через 2 дня, 21.05.2026 15:30).",
+        reply_markup=flow_menu(allow_skip=True),
+    )
+
+
+@router.message(TouchWorkflowStates.entering_next_date)
+async def touch_next_date_message(message: Message, state: FSMContext) -> None:
+    text = (message.text or "").strip()
+    if text == CANCEL_TEXT:
+        await state.clear()
+        await message.answer("Отменено.", reply_markup=main_menu())
+        return
+    data = await state.get_data()
+    company_id = data.get("touch_company_id")
+    if not company_id:
+        await state.clear()
+        await message.answer("Сессия истекла.", reply_markup=main_menu())
+        return
+    next_date = None
+    if text and text != SKIP_TEXT:
+        try:
+            next_date = parse_due_at_input(text)
+        except ValueError as exc:
+            await message.answer(f"Неверный формат даты: {exc}", reply_markup=flow_menu(allow_skip=True))
+            return
+    async with async_session_factory() as session:
+        current_user = await get_current_crm_user(session, message)
+        task = await _log_touch_workflow(
+            session,
+            int(company_id),
+            result=data.get("touch_result"),
+            comment=data.get("touch_comment"),
+            next_due_at=next_date,
+            user_id=current_user.id if current_user else None,
+        )
+    await state.clear()
+    if not task:
+        await message.answer("Не удалось сохранить касание.", reply_markup=main_menu())
+        return
+    await _show_touch_plan(message, task.company_id, edit=False)
+    await message.answer("✅ Касание сохранено.", reply_markup=main_menu())
 
 
 @router.callback_query(F.data.startswith("touch:note:"))
